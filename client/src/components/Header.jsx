@@ -1,30 +1,45 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, NavLink } from 'react-router-dom';
 import useAuth from '../hooks/useAuth';
+import { useTheme } from '../hooks/useTheme';
 import logo from '../assets/logo.png';
-import Calendar from './Calendar';
 import './Header.css';
 
 const navLinks = [
-  { label: 'Programs', to: '/courses' },
+  { label: 'Courses', to: '/courses' },
   { label: 'Certificates', to: '/certificates' },
-  { label: 'For Instructors', to: '/instructor' },
   { label: 'About', to: '/about' },
 ];
 
 const Header = () => {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const closeMenu = () => setMenuOpen(false);
 
   const renderDashboardLink = () => {
     if (!user) return null;
     if (user.role === 'student') {
-      return <Link to="/dashboard/student">Student Hub</Link>;
+      return (
+        <NavLink to="/dashboard/student" onClick={closeMenu}>
+          Student Hub
+        </NavLink>
+      );
     }
     if (user.role === 'instructor') {
-      return <Link to="/dashboard/instructor">Instructor Hub</Link>;
+      return (
+        <NavLink to="/dashboard/instructor" onClick={closeMenu}>
+          Instructor Hub
+        </NavLink>
+      );
     }
     if (user.role === 'admin') {
-      return <Link to="/dashboard/admin">Admin Console</Link>;
+      return (
+        <NavLink to="/dashboard/admin" onClick={closeMenu}>
+          Admin Console
+        </NavLink>
+      );
     }
     return null;
   };
@@ -42,23 +57,45 @@ const Header = () => {
           </div>
         </Link>
 
-        <nav className="primary-nav" aria-label="Primary">
+        <button
+          type="button"
+          className="header-menu-toggle"
+          aria-controls="primary-navigation"
+          aria-expanded={menuOpen}
+          aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          <span aria-hidden="true">{menuOpen ? '×' : '☰'}</span>
+        </button>
+
+        <nav id="primary-navigation" className={`primary-nav ${menuOpen ? 'is-open' : ''}`} aria-label="Primary">
           {navLinks.map((link) => (
-            <Link key={link.label} to={link.to}>
+            <NavLink
+              key={link.label}
+              to={link.to}
+              onClick={closeMenu}
+              className={({ isActive }) => (isActive ? 'is-active' : undefined)}
+            >
               {link.label}
-            </Link>
+            </NavLink>
           ))}
           {renderDashboardLink()}
         </nav>
 
         <div className="header-utilities">
-          <div className="calendar-trigger" aria-label="Open academic calendar">
-            <Calendar />
-          </div>
-
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+          >
+            <span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span>
+            <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
+          </button>
           {user ? (
             <div className="user-controls">
-              <Link to="/profile" className="user-chip">
+              <Link to="/profile" className="user-chip" onClick={closeMenu}>
                 <span className="chip-label">Signed in</span>
                 <strong>{user.name || user.email}</strong>
               </Link>

@@ -1,65 +1,84 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import apiRequest from '../utils/api';
+import { Link, useParams } from 'react-router-dom';
+import apiRequest, { serverUrl } from '../utils/api';
 import useAuth from '../hooks/useAuth';
+import QuizTaker from '../components/QuizTaker';
+import QuizResults from '../components/QuizResults';
+import FlashcardGame from '../components/FlashcardGame';
 import './CourseContent.css';
+
+const getVideoEmbedUrl = (source) => {
+  if (!source) return null;
+  try {
+    const url = new URL(source);
+    const host = url.hostname.replace(/^www\./, '');
+    if (host === 'youtu.be') return `https://www.youtube-nocookie.com/embed/${url.pathname.slice(1)}`;
+    if (host === 'youtube.com' || host === 'm.youtube.com') {
+      const videoId = url.searchParams.get('v');
+      const pathMatch = url.pathname.match(/^\/(?:embed|shorts)\/([^/?]+)/);
+      const id = videoId || pathMatch?.[1];
+      return id ? `https://www.youtube-nocookie.com/embed/${id}` : null;
+    }
+    if (host === 'youtube-nocookie.com' && url.pathname.startsWith('/embed/')) return url.toString();
+    if (host === 'vimeo.com' || host === 'player.vimeo.com') {
+      const videoId = url.pathname.split('/').filter(Boolean)[0];
+      const id = host === 'player.vimeo.com' ? url.pathname.split('/').filter(Boolean)[1] : videoId;
+      return id ? `https://player.vimeo.com/video/${id}` : null;
+    }
+  } catch (error) {
+    return null;
+  }
+  return null;
+};
 
 const CourseContent = () => {
   const { id } = useParams();
   const { user } = useAuth();
   const [completed, setCompleted] = useState([]);
   const [modules, setModules] = useState([]);
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [certificateStatus, setCertificateStatus] = useState(null);
+  const [completionInfo, setCompletionInfo] = useState(null);
   const [course, setCourse] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [viewer, setViewer] = useState({ open: false, lesson: null });
+  const [personalNotes, setPersonalNotes] = useState({});
+  const [lessonNote, setLessonNote] = useState('');
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteMessage, setNoteMessage] = useState('');
   const [quizViewer, setQuizViewer] = useState({ open: false, quiz: null, attempts: [] });
+  const [activeQuizId, setActiveQuizId] = useState(null);
+  const [quizResult, setQuizResult] = useState(null);
   const [assignmentViewer, setAssignmentViewer] = useState({ open: false, assignment: null, submissions: [] });
-  const [quizTimeLeft, setQuizTimeLeft] = useState(null);
-  const [quizTimer, setQuizTimer] = useState(null);
   const [quizCreator, setQuizCreator] = useState({ open: false, moduleId: null });
   const [newQuiz, setNewQuiz] = useState({
     title: '',
     description: '',
+    timeLimit: 30,
+    passingScore: 60,
+    attemptLimit: 1,
+    shuffleQuestions: false,
     questions: [
       { 
         text: '', 
         options: { optionA: '', optionB: '', optionC: '', optionD: '' }, 
         correctAnswer: 'A', 
-        points: 1 
+        points: 1,
+        explanation: '',
       }
     ],
   });
   const [statusMsg, setStatusMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [assignmentSubmission, setAssignmentSubmission] = useState("");
-  const [quizAnswers, setQuizAnswers] = useState([]);
+  const [assignmentFile, setAssignmentFile] = useState(null);
 
   useEffect(() => {
     if (user && user._id) {
       fetchContent();
     }
-  }, [user]);
+  }, [user, id]);
 
-  // Debug logging
-  useEffect(() => {
-    if (user && course) {
-      console.log('CourseContent Debug:', {
-        userId: user._id,
-        userRole: user.role,
-        courseId: course._id,
-        courseInstructor: course.instructor,
-        isInstructor: course.instructor && user._id === course.instructor._id
-      });
-    }
-  }, [user, course]);
-
-  // Cleanup timer when quiz modal closes
-  useEffect(() => {
-    return () => {
-      if (quizTimer) {
-        clearInterval(quizTimer);
-      }
-    };
-  }, [quizTimer]);
   const fetchContent = async () => {
     try {
       setErrorMsg("");
@@ -67,9 +86,48 @@ const CourseContent = () => {
       setModules(data.modules || []);
       setCompleted(data.completedModules || []);
       setCourse(data.course || null);
+      setPersonalNotes(data.personalNotes || {});
+      setProgressPercent(Number(data.progress) || 0);
+      if (user?.role === 'student') {
+        try {
+          const completion = await apiRequest(`/courses/${id}/check-completion`, 'POST', null, true);
+          setCompletionInfo(completion);
+          setCertificateStatus(completion.certificateGenerated ? completion.certificate : null);
+          if (completion.certificateIssuedNow) {
+            setStatusMsg('Course complete — your certificate is ready.');
+          }
+        } catch (completionError) {
+          console.error('Could not check certificate eligibility', completionError);
+        }
+      }
     } catch (err) {
       setErrorMsg('Failed to load course content: ' + err.message);
       console.error('Failed to load course content', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const openLesson = (lesson) => {
+    setLessonNote(personalNotes[lesson._id] || '');
+    setNoteMessage('');
+    setViewer({ open: true, lesson });
+  };
+
+  const handleSaveLessonNote = async () => {
+    if (!viewer.lesson) return;
+    try {
+      setNoteSaving(true);
+      const result = await apiRequest(`/courses/${id}/lessons/${viewer.lesson._id}/notes`, 'PUT', { note: lessonNote }, true);
+      setPersonalNotes(previous => ({ ...previous, [viewer.lesson._id]: result.note }));
+      setStatusMsg(result.message || 'Note saved.');
+      setNoteMessage(result.message || 'Note saved.');
+      setErrorMsg('');
+    } catch (err) {
+      setErrorMsg('Could not save your note: ' + err.message);
+      setNoteMessage('Could not save your note: ' + err.message);
+    } finally {
+      setNoteSaving(false);
     }
   };
 
@@ -96,81 +154,61 @@ const CourseContent = () => {
   };
 
   const handleTakeQuiz = async (quizId) => {
-    try {
-      setErrorMsg("");
-      const quiz = await apiRequest(`/quizzes/single/${quizId}`, 'GET', null, true);
-      setQuizAnswers(new Array(quiz.questions.length).fill(null));
-
-      // Initialize timer if timeLimit is set
-      if (quiz.timeLimit && quiz.timeLimit > 0) {
-        const totalSeconds = quiz.timeLimit * 60; // Convert minutes to seconds
-        setQuizTimeLeft(totalSeconds);
-
-        // Start countdown timer
-        const timer = setInterval(() => {
-          setQuizTimeLeft(prev => {
-            if (prev <= 1) {
-              // Auto-submit when time runs out
-              handleSubmitQuiz();
-              clearInterval(timer);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
-
-        setQuizTimer(timer);
-      } else {
-        setQuizTimeLeft(null);
-        setQuizTimer(null);
-      }
-
-      setQuizViewer({ open: true, quiz });
-    } catch (err) {
-      setErrorMsg('Failed to load quiz: ' + err.message);
-      console.error('Failed to load quiz', err);
-    }
+    setErrorMsg('');
+    setQuizResult(null);
+    setActiveQuizId(quizId);
   };
 
-  const handleSubmitQuiz = async () => {
+  const handleQuizComplete = async (result) => {
+    setActiveQuizId(null);
+    setQuizResult(result);
+    setStatusMsg(`Quiz submitted · ${result.percentage}%${result.isPassed ? ' · passed' : ''}`);
+    await fetchContent();
+  };
+
+  const handleViewQuizAttempts = async (quiz) => {
     try {
-      setErrorMsg("");
-
-      // Clear timer if exists
-      if (quizTimer) {
-        clearInterval(quizTimer);
-        setQuizTimer(null);
-      }
-
-      const answers = quizAnswers.map((answer, index) => ({ questionIndex: index, selectedAnswer: answer }));
-      const resp = await apiRequest(`/quizzes/${quizViewer.quiz._id}/submit`, 'POST', { answers }, true);
-      setStatusMsg(`Quiz submitted! Score: ${resp.score}%`);
-      setQuizViewer({ open: false, quiz: null });
-      setQuizAnswers([]);
-      setQuizTimeLeft(null);
+      const data = await apiRequest(`/quizzes/${quiz._id}/attempts`, 'GET', null, true);
+      setQuizViewer({ open: true, quiz, attempts: data.attempts || [] });
     } catch (err) {
-      setErrorMsg('Failed to submit quiz: ' + err.message);
-      console.error('Failed to submit quiz', err);
+      setErrorMsg('Could not load quiz attempts: ' + err.message);
     }
   };
 
   const handleSubmitAssignment = async () => {
     try {
       setErrorMsg("");
-      await apiRequest(`/assignments/${assignmentViewer.assignment._id}/submit`, 'POST', { submission: assignmentSubmission }, true);
+      const submission = new FormData();
+      if (assignmentFile) submission.append('file', assignmentFile);
+      if (assignmentSubmission.trim()) submission.append('submission', assignmentSubmission.trim());
+      await apiRequest(`/assignments/${assignmentViewer.assignment._id}/submit`, 'POST', submission, true);
       alert("Assignment submitted successfully!");
-      setAssignmentViewer({ open: false, assignment: null, submissions: [] });
-      setAssignmentSubmission("");
+      closeAssignmentViewer();
+      await fetchContent();
     } catch (err) {
       setErrorMsg('Failed to submit assignment: ' + err.message);
       console.error('Failed to submit assignment', err);
     }
   };
 
+  const openAssignment = (assignment) => {
+    setAssignmentSubmission('');
+    setAssignmentFile(null);
+    setAssignmentViewer({ open: true, assignment, submission: assignment.userSubmission, submissions: [] });
+  };
+
+  const closeAssignmentViewer = () => {
+    setAssignmentViewer({ open: false, assignment: null, submissions: [] });
+    setAssignmentSubmission('');
+    setAssignmentFile(null);
+  };
+
   const handleViewSubmissions = async (assignment) => {
     try {
       setErrorMsg("");
       const data = await apiRequest(`/assignments/${assignment._id}/submissions`, 'GET', null, true);
+      setAssignmentFile(null);
+      setAssignmentSubmission('');
       setAssignmentViewer({ open: true, assignment, submissions: data.submissions || [] });
     } catch (err) {
       setErrorMsg('Failed to load submissions: ' + err.message);
@@ -189,17 +227,6 @@ const CourseContent = () => {
     } catch (err) {
       setErrorMsg('Failed to grade submission: ' + err.message);
       console.error('Failed to grade submission', err);
-    }
-  };
-
-  const handleDeleteQuiz = async (quizId) => {
-    try {
-      await apiRequest(`/quizzes/${quizId}`, 'DELETE', null, true);
-      setStatusMsg("Quiz deleted successfully!");
-      await fetchContent();
-    } catch (err) {
-      setErrorMsg('Failed to delete quiz: ' + err.message);
-      console.error('Failed to delete quiz', err);
     }
   };
 
@@ -224,10 +251,14 @@ const CourseContent = () => {
           text: '', 
           options: { optionA: '', optionB: '', optionC: '', optionD: '' }, 
           correctAnswer: 'A', 
-          points: 1 
+          points: 1,
+          explanation: '',
         }
       ],
-      timeLimit: 30
+      timeLimit: 30,
+      passingScore: 60,
+      attemptLimit: 1,
+      shuffleQuestions: false,
     });
   };
 
@@ -238,7 +269,8 @@ const CourseContent = () => {
         text: '', 
         options: { optionA: '', optionB: '', optionC: '', optionD: '' }, 
         correctAnswer: 'A', 
-        points: 1 
+        points: 1,
+        explanation: '',
       }]
     }));
   };
@@ -284,6 +316,22 @@ const CourseContent = () => {
         setErrorMsg("All questions and options must be filled");
         return;
       }
+      if (newQuiz.questions.length > 100 || newQuiz.questions.some(question => !Number.isFinite(Number(question.points)) || Number(question.points) <= 0)) {
+        setErrorMsg("Use 1 to 100 questions, with at least 1 point per question");
+        return;
+      }
+      if (newQuiz.passingScore === '' || !Number.isFinite(Number(newQuiz.passingScore)) || Number(newQuiz.passingScore) < 0 || Number(newQuiz.passingScore) > 100) {
+        setErrorMsg("Passing score must be between 0 and 100");
+        return;
+      }
+      if (newQuiz.attemptLimit === '' || !Number.isInteger(Number(newQuiz.attemptLimit)) || Number(newQuiz.attemptLimit) < 1 || Number(newQuiz.attemptLimit) > 10) {
+        setErrorMsg("Attempt limit must be between 1 and 10");
+        return;
+      }
+      if (newQuiz.timeLimit !== '' && (!Number.isInteger(Number(newQuiz.timeLimit)) || Number(newQuiz.timeLimit) < 1 || Number(newQuiz.timeLimit) > 180)) {
+        setErrorMsg("Time limit must be between 1 and 180 minutes, or left blank");
+        return;
+      }
 
       await apiRequest('/quizzes', 'POST', {
         title: newQuiz.title,
@@ -291,7 +339,10 @@ const CourseContent = () => {
         questions: newQuiz.questions,
         courseId: id,
         moduleId: quizCreator.moduleId,
-        timeLimit: newQuiz.timeLimit
+        timeLimit: newQuiz.timeLimit === '' ? null : Number(newQuiz.timeLimit),
+        passingScore: Number(newQuiz.passingScore),
+        attemptLimit: Number(newQuiz.attemptLimit),
+        shuffleQuestions: newQuiz.shuffleQuestions,
       }, true);
 
       setStatusMsg("Quiz created successfully!");
@@ -303,66 +354,81 @@ const CourseContent = () => {
     }
   };
 
-  const progress = modules.length ? (completed.length / modules.length) * 100 : 0;
+  const isInstructor = Boolean(user && course && (user.role === 'admin' || user._id === course.instructor?._id));
+
+  if (isLoading) return <div className="course-content-page"><p className="muted-row">Loading your course…</p></div>;
 
   return (
   <div className="course-content-page">
-      <h2>{course ? course.title : 'Course Content'}</h2>
-      {statusMsg && <div style={{ color: 'green', marginBottom: 8 }}>{statusMsg}</div>}
-      {errorMsg && <div style={{ color: 'red', marginBottom: 8 }}>{errorMsg}</div>}
+      <header className="course-content-header">
+        <div>
+          <p className="eyebrow">Your learning space</p>
+          <h2>{course ? course.title : 'Course Content'}</h2>
+          <p className="course-content-subtitle">Work through each module, review the lesson resources, and track your progress as you go.</p>
+        </div>
+        <div className="course-progress-summary"><strong>{Math.round(progressPercent)}%</strong><span>course progress</span></div>
+      </header>
+      {statusMsg && <div className="course-message success" role="status">{statusMsg}</div>}
+      {errorMsg && <div className="course-message error" role="alert">{errorMsg}</div>}
       <div className="progress-bar">
-        <div className="progress" style={{ width: `${progress}%` }} />
+        <div className="progress" style={{ width: `${progressPercent}%` }} />
       </div>
+      {certificateStatus && (
+        <section className="course-certificate-notice" role="status">
+          <div><span aria-hidden="true">🏆</span><div><h3>Certificate earned</h3><p>Your certificate for {course?.title || 'this course'} is ready.</p></div></div>
+          <Link to="/certificates" className="btn btn-primary">View certificate</Link>
+        </section>
+      )}
+      {completionInfo?.completed && !certificateStatus && (
+        <section className="course-certificate-pending" role="status">
+          <div><h3>Course complete · 100%</h3><p>{completionInfo.certificateReason || 'Your certificate could not be issued yet. Check again in a moment.'}</p></div>
+          <button type="button" className="btn btn-secondary" onClick={fetchContent}>Check again</button>
+        </section>
+      )}
+      {modules.length === 0 && <div className="empty-course-state"><h3>Course content is being prepared</h3><p>Your instructor has not added any modules yet.</p></div>}
       <ul className="modules-list">
         {modules.map((mod) => (
           <li key={mod._id} className="module-item">
-            <label>
+            <div className="module-heading">
+              <div><span className="module-kicker">Module</span><h3>{mod.title}</h3></div>
+              {!isInstructor && <label className="completion-toggle">
               <input
                 type="checkbox"
                 checked={completed.includes(mod._id)}
                 onChange={e => handleCheck(mod._id, e.target.checked)}
               />
-              {mod.title}
-            </label>
-            <ul style={{ marginTop: 8, marginBottom: 0 }}>
+              Complete
+              </label>}
+            </div>
+            <div className="module-section">
+            <h4>Lessons <span>{mod.lessons?.length || 0}</span></h4>
+            <ul className="lesson-list">
               {mod.lessons && mod.lessons.length > 0 ? mod.lessons.map(lesson => (
-                <li key={lesson._id} style={{ marginBottom: 4 }}>
-                  <span style={{ fontWeight: 500 }}>{lesson.title}</span> ({lesson.contentType})
+                <li key={lesson._id} className="lesson-row">
+                  <div><strong>{lesson.title}</strong><small>{lesson.contentType}{lesson.duration ? ` · ${lesson.duration} min` : ''}{lesson.summary ? ` · ${lesson.summary}` : ''}</small></div>
                   {lesson.contentType === 'text' && (
-                    <button style={{ marginLeft: 8 }} onClick={() => setViewer({ open: true, lesson })}>View Text</button>
+                    <button className="secondary-button" onClick={() => openLesson(lesson)}>Open lesson</button>
                   )}
-                  {lesson.contentType === 'pdf' && lesson.contentUrl && (
-                    <button style={{ marginLeft: 8 }} onClick={() => setViewer({ open: true, lesson })}>View PDF</button>
-                  )}
-                  {lesson.contentType === 'slide' && lesson.contentUrl && (
-                    <button style={{ marginLeft: 8 }} onClick={() => setViewer({ open: true, lesson })}>View PPT</button>
-                  )}
-                  {lesson.contentType === 'video' && lesson.contentUrl && (
-                    <button style={{ marginLeft: 8 }} onClick={() => setViewer({ open: true, lesson })}>View Video</button>
-                  )}
-                  {(lesson.contentType === 'doc' || lesson.contentType === 'pages') && lesson.contentUrl && (
-                    <button style={{ marginLeft: 8 }} onClick={() => setViewer({ open: true, lesson })}>View {lesson.contentType.toUpperCase()}</button>
-                  )}
+                  {lesson.contentType !== 'text' && (lesson.contentUrl || lesson.content) && <button className="secondary-button" onClick={() => openLesson(lesson)}>Open lesson</button>}
                 </li>
-              )) : <li style={{ color: '#888' }}>No lessons yet.</li>}
+              )) : <li className="muted-row">No lessons have been added yet.</li>}
             </ul>
+            </div>
             {/* Assignments */}
             {mod.assignments && mod.assignments.length > 0 && (
-              <div style={{ marginTop: 8 }}>
-                <h4>Assignments</h4>
-                <ul>
+              <div className="module-section">
+                <h4>Assignments <span>{mod.assignments.length}</span></h4>
+                <ul className="activity-list">
                   {mod.assignments.map(assignment => (
-                    <li key={assignment._id} style={{ marginBottom: 4 }}>
-                      <span style={{ fontWeight: 500 }}>{assignment.title}</span>
-                      <p>{assignment.description}</p>
-                      <p>Due: {new Date(assignment.dueDate).toLocaleDateString()}</p>
+                    <li key={assignment._id} className="activity-card">
+                      <div><strong>{assignment.title}</strong><p>{assignment.description}</p><small>Due {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'Any time'}</small></div>
                       {user && course && course.instructor && (user._id === course.instructor._id || user.role === 'admin') ? (
                         <>
-                          <button style={{ marginLeft: 8 }} onClick={() => handleViewSubmissions(assignment)}>View Submissions</button>
-                          <button style={{ marginLeft: 8, backgroundColor: 'red', color: 'white' }} onClick={() => handleDeleteAssignment(assignment._id)}>Delete Assignment</button>
+                          <button className="secondary-button" onClick={() => handleViewSubmissions(assignment)}>View submissions</button>
+                          <button className="danger-button" onClick={() => handleDeleteAssignment(assignment._id)}>Delete</button>
                         </>
                       ) : (
-                        <button style={{ marginLeft: 8 }} onClick={() => setAssignmentViewer({ open: true, assignment, submission: assignment.userSubmission })}>{assignment.userSubmission ? "See Grade" : "Submit Assignment"}</button>
+                        <button className="secondary-button" onClick={() => openAssignment(assignment)}>{assignment.userSubmission ? "View submission" : "Submit assignment"}</button>
                       )}
                     </li>
                   ))}
@@ -371,21 +437,22 @@ const CourseContent = () => {
             )}
             {/* Quizzes */}
             {mod.quizzes && mod.quizzes.length > 0 && (
-              <div style={{ marginTop: 8 }}>
-                <h4>Quizzes</h4>
-                <ul>
+              <div className="module-section">
+                <h4>Quizzes <span>{mod.quizzes.length}</span></h4>
+                <ul className="activity-list">
                   {mod.quizzes.map(quiz => (
-                    <li key={quiz._id} style={{ marginBottom: 4 }}>
-                      <span style={{ fontWeight: 500 }}>{quiz.title}</span>
-                      <p>{quiz.description}</p>
-                      <p>Questions: {quiz.questions ? quiz.questions.length : 0}</p>
-                      {user && course && course.instructor && user._id === course.instructor._id ? (
-                        <>
-                          <button style={{ marginLeft: 8 }} onClick={() => setQuizViewer({ open: true, quiz })}>View Attempts</button>
-                          <button style={{ marginLeft: 8, backgroundColor: 'red', color: 'white' }} onClick={() => handleDeleteQuiz(quiz._id)}>Delete Quiz</button>
-                        </>
-                      ) : (
-                        <button style={{ marginLeft: 8 }} onClick={() => handleTakeQuiz(quiz._id)}>Take Quiz</button>
+                    <li key={quiz._id} className="activity-card">
+                      <div><strong>{quiz.title}</strong><p>{quiz.description}</p><small>
+                        {quiz.questions?.length || 0} questions · {quiz.marks || 0} points · Pass mark {quiz.passingScore ?? 60}%
+                        {quiz.timeLimit ? ` · ${quiz.timeLimit} min` : ''}
+                        {!isInstructor ? ` · ${quiz.attemptsRemaining} attempts left` : ''}
+                      </small>
+                      {quiz.score !== null && quiz.score !== undefined && (
+                        <p className="quiz-score"><strong>Best score:</strong> {quiz.score}%</p>
+                      )}
+                      </div>
+                      {isInstructor ? <button className="secondary-button" onClick={() => handleViewQuizAttempts(quiz)}>View attempts</button> : (
+                        <button className="primary-button" disabled={!quiz.attemptsRemaining} onClick={() => handleTakeQuiz(quiz._id)}>{quiz.attemptsRemaining ? 'Start quiz' : 'No attempts left'}</button>
                       )}
                     </li>
                   ))}
@@ -394,159 +461,166 @@ const CourseContent = () => {
             )}
 
             {/* Add Quiz Button for Instructors - Always show for debugging */}
-            {user && course && course.instructor && (
-              <div style={{ marginTop: 8 }}>
-                <button
-                  style={{ backgroundColor: '#28a745', color: 'white', padding: '8px 16px', border: 'none', borderRadius: '4px' }}
-                  onClick={() => handleCreateQuiz(mod._id)}
-                >
-                  + Add Quiz
-                </button>
-                {user._id !== course.instructor._id && (
-                  <span style={{ marginLeft: 8, color: 'red', fontSize: '12px' }}>
-                    (Not instructor)
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* Show if no instructor permission */}
-            {user && course && !course.instructor && (
-              <div style={{ marginTop: 8, color: 'orange', fontSize: '12px' }}>
-                Course has no instructor assigned
-              </div>
-            )}
+            {isInstructor && <div className="module-toolbar"><button className="primary-button" onClick={() => handleCreateQuiz(mod._id)}>+ Create quiz</button></div>}
           </li>
         ))}
       </ul>
       {/* Modal Viewer */}
       {viewer.open && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setViewer({ open: false, lesson: null })}>
-          <div style={{
-            background: '#fff',
-            padding: 24,
-            borderRadius: 8,
-            width: '80vw',
-            maxWidth: 800,
-            minHeight: 300,
-            maxHeight: '80vh',
-            overflow: 'auto',
-            position: 'relative',
-            boxSizing: 'border-box',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }} onClick={e => e.stopPropagation()}>
-            <button style={{ position: 'absolute', top: 8, right: 8 }} onClick={() => setViewer({ open: false, lesson: null })}>Close</button>
-            <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="dialog-backdrop" onClick={() => setViewer({ open: false, lesson: null })}>
+          <div className="lesson-dialog" onClick={e => e.stopPropagation()}>
+            <button className="dialog-close" onClick={() => setViewer({ open: false, lesson: null })} aria-label="Close lesson">×</button>
+            <div className="lesson-dialog-content">
+              <p className="eyebrow">Lesson</p>
               <h3>{viewer.lesson?.title}</h3>
-              {viewer.lesson?.contentType === 'text' && (
-                <div style={{
-                  whiteSpace: 'pre-wrap',
-                  color: '#222',
-                  fontSize: '1.05rem',
-                  padding: 12,
-                  margin: 0,
-                  background: '#f9fafb',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: 6,
-                  minHeight: 120,
-                  maxHeight: '60vh',
-                  overflowY: 'auto',
-                }}>
-                  {viewer.lesson.content && viewer.lesson.content.trim() !== ''
-                    ? viewer.lesson.content
-                    : <span style={{ color: '#ef4444' }}><em>No text content available for this lesson.</em></span>}
+              {viewer.lesson?.summary && <p className="lesson-summary">{viewer.lesson.summary}</p>}
+              {viewer.lesson?.duration > 0 && <span className="lesson-duration">About {viewer.lesson.duration} minutes</span>}
+              {viewer.lesson?.objectives?.length > 0 && (
+                <div className="lesson-info-block">
+                  <strong>Learning objectives</strong>
+                  <ul>{viewer.lesson.objectives.map((objective, index) => <li key={index}>{objective}</li>)}</ul>
+                </div>
+              )}
+              {(viewer.lesson?.imageUrl || (viewer.lesson?.contentType === 'image' && viewer.lesson?.contentUrl)) && (
+                <figure className="lesson-feature-image">
+                  <img
+                    src={viewer.lesson.imageUrl?.startsWith('/lesson-illustrations/') ? viewer.lesson.imageUrl : serverUrl(viewer.lesson.imageUrl || viewer.lesson.contentUrl)}
+                    alt={viewer.lesson.imageAlt || `${viewer.lesson.title} lesson illustration`}
+                    loading="lazy"
+                  />
+                  {(viewer.lesson.imageCaption || viewer.lesson.summary) && <figcaption>{viewer.lesson.imageCaption || viewer.lesson.summary}</figcaption>}
+                </figure>
+              )}
+              {viewer.lesson?.contentType === 'text' && viewer.lesson.content?.trim() && (
+                <section className="lesson-introduction">
+                  <h4>Introduction</h4>
+                  <p>{viewer.lesson.content}</p>
+                </section>
+              )}
+              {viewer.lesson?.contentSections?.length > 0 && (
+                <div className="lesson-chapter-sections">
+                  {viewer.lesson.contentSections.map((section, index) => (
+                    <section className={`lesson-chapter-section lesson-chapter-section--${section.type || 'theory'}`} key={section._id || `${section.heading}-${index}`}>
+                      <span className="lesson-section-label">{{
+                        theory: 'Theory',
+                        worked_example: 'Worked example',
+                        key_terms: 'Key terms',
+                        common_mistakes: 'Watch out for',
+                        takeaways: 'Chapter recap',
+                      }[section.type] || 'Lesson section'}</span>
+                      <h4>{section.heading}</h4>
+                      <p>{section.body}</p>
+                    </section>
+                  ))}
+                </div>
+              )}
+              {viewer.lesson?.contentType === 'text' && !viewer.lesson.content?.trim() && !viewer.lesson.contentSections?.length && (
+                <div className="lesson-text-content"><em>No lesson text has been added yet.</em></div>
+              )}
+              {viewer.lesson?.selfChecks?.length > 0 && (
+                <section className="lesson-self-checks">
+                  <p className="lesson-section-label">Pause and practice</p>
+                  <h4>Check your understanding</h4>
+                  <p className="self-check-intro">Try to answer each question before revealing the explanation.</p>
+                  <ol>{viewer.lesson.selfChecks.map((check, index) => (
+                    <li key={check._id || `${check.question}-${index}`}>
+                      <strong>{check.question}</strong>
+                      <details><summary>Reveal answer</summary><p>{check.answer}</p></details>
+                    </li>
+                  ))}</ol>
+                </section>
+              )}
+              {viewer.lesson?.games?.length > 0 && (
+                <section className="lesson-games">
+                  <p className="lesson-section-label">Learn by playing</p>
+                  <h4>Practice games</h4>
+                  {viewer.lesson.games.map((game, index) => (
+                    <FlashcardGame key={game._id || `${game.title}-${index}`} game={game} />
+                  ))}
+                </section>
+              )}
+              {viewer.lesson?.notes && <div className="lesson-info-block"><h4>Course notes</h4><p>{viewer.lesson.notes}</p></div>}
+              {viewer.lesson?.teachingTips && <div className="lesson-info-block"><h4>Instructor tips</h4><p>{viewer.lesson.teachingTips}</p></div>}
+              {viewer.lesson?.resources?.length > 0 && (
+                <div className="lesson-info-block">
+                  <h4>Reading links and sample files</h4>
+                  <ul>{viewer.lesson.resources.map((resource, index) => <li key={index}><a href={serverUrl(resource)} target="_blank" rel="noopener noreferrer">{resource}</a></li>)}</ul>
                 </div>
               )}
               {viewer.lesson?.contentType === 'pdf' && viewer.lesson?.contentUrl && (
-                <a href={`http://localhost:5000${viewer.lesson.contentUrl}`} target="_blank" rel="noopener noreferrer" style={{ display: 'block', marginTop: 12, padding: 12, background: '#007bff', color: 'white', textDecoration: 'none', borderRadius: 4 }}>View PDF in New Tab</a>
+                <a className="lesson-resource-link" href={serverUrl(viewer.lesson.contentUrl)} target="_blank" rel="noopener noreferrer">Open PDF in a new tab</a>
               )}
               {viewer.lesson?.contentType === 'slide' && viewer.lesson?.contentUrl && (
-                <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent('http://localhost:5000' + viewer.lesson.contentUrl)}`} title="PPT Viewer" style={{ width: '70vw', height: '70vh', border: 'none' }} />
+                <iframe className="lesson-embed" src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(serverUrl(viewer.lesson.contentUrl))}`} title="Presentation viewer" />
               )}
               {viewer.lesson?.contentType === 'doc' && viewer.lesson?.contentUrl && (
-                <iframe src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent('http://localhost:5000' + viewer.lesson.contentUrl)}`} title="DOC Viewer" style={{ width: '70vw', height: '70vh', border: 'none' }} />
+                <iframe className="lesson-embed" src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(serverUrl(viewer.lesson.contentUrl))}`} title="Document viewer" />
+              )}
+              {viewer.lesson?.contentType === 'dataset' && viewer.lesson?.contentUrl && (
+                <a className="lesson-resource-link" href={serverUrl(viewer.lesson.contentUrl)} download>Download sample dataset or project file</a>
               )}
               {viewer.lesson?.contentType === 'pages' && viewer.lesson?.contentUrl && (
-                <iframe src={`http://localhost:5000${viewer.lesson.contentUrl}`} title="Pages Viewer" style={{ width: '70vw', height: '70vh', border: 'none' }} />
+                <iframe className="lesson-embed" src={serverUrl(viewer.lesson.contentUrl)} title="Lesson viewer" />
               )}
               {viewer.lesson?.contentType === 'video' && viewer.lesson?.contentUrl && (
-                <video src={`http://localhost:5000${viewer.lesson.contentUrl}`} controls style={{ width: '70vw', maxHeight: '70vh' }} />
+                getVideoEmbedUrl(viewer.lesson.contentUrl)
+                  ? <iframe className="lesson-video" src={getVideoEmbedUrl(viewer.lesson.contentUrl)} title={`${viewer.lesson.title} video`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
+                  : <video className="lesson-video" src={serverUrl(viewer.lesson.contentUrl)} controls playsInline preload="metadata" />
               )}
+              <section className="personal-notes">
+                <div><h4>My private notes</h4><p>Only you can see these notes. They stay attached to this lesson.</p></div>
+                <textarea value={lessonNote} onChange={event => { setLessonNote(event.target.value); setNoteMessage(''); }} maxLength={10000} rows={5} placeholder="Capture key ideas, questions, or reminders…" />
+                <div className="notes-footer"><span>{lessonNote.length}/10,000</span><button className="primary-button" onClick={handleSaveLessonNote} disabled={noteSaving}>{noteSaving ? 'Saving…' : 'Save notes'}</button></div>
+                {noteMessage && <p className={`note-feedback ${noteMessage.startsWith('Could not') ? 'error' : 'success'}`} role="status">{noteMessage}</p>}
+              </section>
             </div>
           </div>
         </div>
       )}
-      {/* Quiz Viewer */}
+      {activeQuizId && <div className="dialog-backdrop" onClick={() => setActiveQuizId(null)}><div onClick={event => event.stopPropagation()}><QuizTaker quizId={activeQuizId} onComplete={handleQuizComplete} onCancel={() => setActiveQuizId(null)} /></div></div>}
+      {quizResult && <div className="dialog-backdrop" onClick={() => setQuizResult(null)}><div onClick={event => event.stopPropagation()}><QuizResults results={quizResult} quizTitle={quizResult.quizTitle} onClose={() => setQuizResult(null)} onRetakeQuiz={() => { setQuizResult(null); setActiveQuizId(quizResult.quizId); }} /></div></div>}
       {quizViewer.open && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setQuizViewer({ open: false, quiz: null })}>
-          <div style={{ background: '#fff', padding: 24, borderRadius: 8, maxWidth: '90vw', maxHeight: '90vh', overflow: 'auto', position: 'relative' }} onClick={e => e.stopPropagation()}>
-            <button style={{ position: 'absolute', top: 8, right: 8 }} onClick={() => {
-              if (quizTimer) clearInterval(quizTimer);
-              setQuizViewer({ open: false, quiz: null });
-              setQuizTimeLeft(null);
-              setQuizTimer(null);
-            }}>Close</button>
-            <h3>{quizViewer.quiz?.title}</h3>
-            <p>{quizViewer.quiz?.description}</p>
-
-            {/* Quiz Timer */}
-            {quizTimeLeft !== null && (
-              <div style={{
-                background: quizTimeLeft < 300 ? '#fff3cd' : '#d1ecf1', // Yellow when < 5 minutes, blue otherwise
-                border: `1px solid ${quizTimeLeft < 300 ? '#ffc107' : '#bee5eb'}`,
-                borderRadius: '8px',
-                padding: '12px',
-                marginBottom: '16px',
-                textAlign: 'center',
-                fontSize: '18px',
-                fontWeight: 'bold',
-                color: quizTimeLeft < 300 ? '#856404' : '#0c5460'
-              }}>
-                ⏱️ Time Remaining: {Math.floor(quizTimeLeft / 60)}:{(quizTimeLeft % 60).toString().padStart(2, '0')}
-                {quizTimeLeft < 300 && <div style={{ fontSize: '14px', marginTop: '4px', color: '#856404' }}>⏰ Less than 5 minutes remaining!</div>}
-              </div>
+        <div className="dialog-backdrop" onClick={() => setQuizViewer({ open: false, quiz: null, attempts: [] })}>
+          <div className="attempts-dialog" onClick={event => event.stopPropagation()}>
+            <button className="dialog-close" onClick={() => setQuizViewer({ open: false, quiz: null, attempts: [] })} aria-label="Close attempts">×</button>
+            <p className="eyebrow">Instructor view</p>
+            <h3>{quizViewer.quiz?.title} · Attempts</h3>
+            {quizViewer.attempts.length === 0 ? <p className="muted-row">No submissions yet.</p> : (
+              <div className="attempts-list">{quizViewer.attempts.map((attempt, index) => (
+                <article className="attempt-card" key={attempt._id || index}>
+                  <header><strong>{attempt.student?.name || 'Student'}</strong><span>{attempt.score}%</span></header>
+                  <small>{attempt.student?.email || ''}{attempt.attemptedAt ? ` · ${new Date(attempt.attemptedAt).toLocaleString()}` : ''}{attempt.isAutoSubmit ? ' · Auto-submitted' : ''}</small>
+                  {attempt.answers?.length > 0 && <details><summary>Review answers</summary><ol>{attempt.answers.map((answer, answerIndex) => <li key={`${answer.questionIndex}-${answerIndex}`}><strong>{answer.questionText}</strong><p>Selected: {answer.selectedAnswerText || 'No answer'}{answer.isCorrect ? ' · Correct' : ` · Correct answer: ${answer.correctAnswerText}`}</p>{answer.explanation && <small>{answer.explanation}</small>}</li>)}</ol></details>}
+                </article>
+              ))}</div>
             )}
-
-            <form onSubmit={e => { e.preventDefault(); handleSubmitQuiz(); }}>
-              {quizViewer.quiz?.questions.map((q, idx) => (
-                <div key={idx} style={{ marginBottom: 12 }}>
-                  <p><strong>{q.question}</strong></p>
-                  {q.options.map((opt, i) => (
-                    <label key={i} style={{ display: 'block' }}>
-                      <input
-                        type="radio"
-                        name={`question-${idx}`}
-                        value={i}
-                        checked={quizAnswers[idx] === i}
-                        onChange={() => {
-                          const newAnswers = [...quizAnswers];
-                          newAnswers[idx] = i;
-                          setQuizAnswers(newAnswers);
-                        }}
-                        required
-                      />
-                      {opt}
-                    </label>
-                  ))}
-                </div>
-              ))}
-              <button type="submit">Submit Quiz</button>
-            </form>
           </div>
         </div>
       )}
       {/* Assignment Viewer */}
       {assignmentViewer.open && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setAssignmentViewer({ open: false, assignment: null, submissions: [] })}>
-          <div style={{ background: '#fff', padding: 24, borderRadius: 8, maxWidth: '90vw', maxHeight: '90vh', overflow: 'auto', position: 'relative' }} onClick={e => e.stopPropagation()}>
-            <button style={{ position: 'absolute', top: 8, right: 8 }} onClick={() => setAssignmentViewer({ open: false, assignment: null, submissions: [] })}>Close</button>
+        <div className="dialog-backdrop" onClick={closeAssignmentViewer}>
+          <div className="dialog-panel assignment-dialog" onClick={e => e.stopPropagation()}>
+            <button className="dialog-close" onClick={closeAssignmentViewer} aria-label="Close assignment">×</button>
             <h3>{assignmentViewer.assignment?.title}</h3>
             <p>{assignmentViewer.assignment?.description}</p>
+            {assignmentViewer.assignment?.questions?.length > 0 && (
+              <section className="assignment-brief">
+                <h4>Project tasks</h4>
+                <ol>{assignmentViewer.assignment.questions.map((question, index) => <li key={index}>{question.question}</li>)}</ol>
+              </section>
+            )}
+            {assignmentViewer.assignment?.rubric?.length > 0 && (
+              <section className="assignment-rubric">
+                <h4>Grading rubric</h4>
+                <ul>{assignmentViewer.assignment.rubric.map((criterion, index) => (
+                  <li key={`${criterion.criterion}-${index}`}>
+                    <div><strong>{criterion.criterion}</strong>{criterion.description && <p>{criterion.description}</p>}</div>
+                    <span>{criterion.points} pts</span>
+                  </li>
+                ))}</ul>
+              </section>
+            )}
             {assignmentViewer.submissions && assignmentViewer.submissions.length > 0 ? (
               <div>
                 <h4>Submissions</h4>
@@ -554,7 +628,7 @@ const CourseContent = () => {
                   {assignmentViewer.submissions.map(sub => (
                     <li key={sub._id} style={{ marginBottom: 8 }}>
                       <p><strong>Student:</strong> {sub.student.name} ({sub.student.email})</p>
-                      <p><strong>Submission:</strong> {sub.submission}</p>
+                      <p><strong>Submission:</strong> {sub.submission?.startsWith('/uploads/') ? <a href={serverUrl(sub.submission)} target="_blank" rel="noopener noreferrer">Open submitted file</a> : sub.submission}</p>
                       <p><strong>Grade:</strong> {sub.grade !== undefined ? sub.grade : 'Assignment to be graded'}</p>
                       <input
                         type="number"
@@ -572,7 +646,7 @@ const CourseContent = () => {
             ) : assignmentViewer.submission ? (
               <div>
                 <h4>Your Submission</h4>
-                <p>{assignmentViewer.submission.submission}</p>
+                <p>{assignmentViewer.submission.submission?.startsWith('/uploads/') ? <a href={serverUrl(assignmentViewer.submission.submission)} target="_blank" rel="noopener noreferrer">Open submitted file</a> : assignmentViewer.submission.submission}</p>
                 <p><strong>Grade:</strong> {assignmentViewer.submission.grade !== undefined ? assignmentViewer.submission.grade : 'Assignment to be graded'}</p>
               </div>
             ) : (
@@ -580,12 +654,16 @@ const CourseContent = () => {
                 <textarea
                   value={assignmentSubmission}
                   onChange={e => setAssignmentSubmission(e.target.value)}
-                  placeholder="Enter your submission here"
+                  placeholder="Describe your work or add a written response"
                   rows={10}
                   style={{ width: '100%' }}
-                  required
+                  required={!assignmentFile}
                 />
-                <button type="submit">Submit Assignment</button>
+                <label className="assignment-file-field">Project file <span>PDF, Word, text, or image · max 10 MB</span>
+                  <input type="file" accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png" onChange={event => setAssignmentFile(event.target.files?.[0] || null)} />
+                </label>
+                {assignmentFile && <p className="assignment-file-name">Selected: {assignmentFile.name}</p>}
+                <button type="submit" disabled={!assignmentSubmission.trim() && !assignmentFile}>Submit assignment</button>
               </form>
             )}
           </div>
@@ -593,9 +671,9 @@ const CourseContent = () => {
       )}
       {/* Quiz Creator Modal */}
       {quizCreator.open && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setQuizCreator({ open: false, moduleId: null })}>
-          <div style={{ background: '#fff', padding: 24, borderRadius: 8, maxWidth: '90vw', maxHeight: '90vh', overflow: 'auto', position: 'relative' }} onClick={e => e.stopPropagation()}>
-            <button style={{ position: 'absolute', top: 8, right: 8 }} onClick={() => setQuizCreator({ open: false, moduleId: null })}>Close</button>
+        <div className="dialog-backdrop" onClick={() => setQuizCreator({ open: false, moduleId: null })}>
+          <div className="dialog-panel quiz-creator-dialog" onClick={e => e.stopPropagation()}>
+            <button className="dialog-close" onClick={() => setQuizCreator({ open: false, moduleId: null })} aria-label="Close quiz creator">×</button>
             <h3>Create New Quiz</h3>
 
             <div style={{ marginBottom: 16 }}>
@@ -621,9 +699,14 @@ const CourseContent = () => {
                   min="1"
                   max="180"
                   value={newQuiz.timeLimit}
-                  onChange={e => setNewQuiz(prev => ({ ...prev, timeLimit: parseInt(e.target.value) }))}
+                  onChange={e => setNewQuiz(prev => ({ ...prev, timeLimit: e.target.value === '' ? '' : Number(e.target.value) }))}
                   style={{ width: '80px', padding: '4px' }}
                 />
+              </div>
+              <div className="quiz-settings-grid">
+                <label>Passing score (%)<input type="number" min="0" max="100" value={newQuiz.passingScore} onChange={e => setNewQuiz(prev => ({ ...prev, passingScore: e.target.value === '' ? '' : Number(e.target.value) }))} /></label>
+                <label>Attempts per learner<input type="number" min="1" max="10" value={newQuiz.attemptLimit} onChange={e => setNewQuiz(prev => ({ ...prev, attemptLimit: e.target.value === '' ? '' : Number(e.target.value) }))} /></label>
+                <label className="checkbox-setting"><input type="checkbox" checked={newQuiz.shuffleQuestions} onChange={e => setNewQuiz(prev => ({ ...prev, shuffleQuestions: e.target.checked }))} /> Shuffle questions for each attempt</label>
               </div>
             </div>
 
@@ -686,6 +769,7 @@ const CourseContent = () => {
                     style={{ width: '60px', padding: '4px' }}
                   />
                 </div>
+                <textarea className="explanation-input" placeholder="Answer explanation shown after submission (optional)" value={question.explanation || ''} onChange={e => handleQuestionChange(qIndex, 'explanation', e.target.value)} rows={2} />
               </div>
             ))}
 

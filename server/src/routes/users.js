@@ -9,6 +9,8 @@ const {
   getAllUsers,
   updateUserRole,
   deleteUser,
+  getCourseStudents,
+  exportCourseStudents,
 } = require("../controllers/userController");
 const { protect, authorize } = require("../middleware/auth");
 
@@ -38,6 +40,16 @@ router.get("/dashboard/student", protect, getStudentDashboard);
 // @desc    Get instructor dashboard data
 // @access  Private (Instructor)
 router.get("/dashboard/instructor", protect, getInstructorDashboard);
+
+// @route   GET /api/users/courses/:courseId/students
+// @desc    View enrolled students and progress for an instructor course
+// @access  Private (Instructor/Admin)
+router.get("/courses/:courseId/students", protect, getCourseStudents);
+
+// @route   GET /api/users/courses/:courseId/students/export
+// @desc    Export enrolled students and progress as CSV
+// @access  Private (Instructor/Admin)
+router.get("/courses/:courseId/students/export", protect, exportCourseStudents);
 
 // @route   GET /api/users/dashboard/admin
 // @desc    Get admin dashboard data

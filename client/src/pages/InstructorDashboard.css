@@ -193,6 +193,40 @@
   border-radius: var(--border-radius-sm);
 }
 
+.enrolled-students {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.enrolled-students strong {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.enrolled-students ul {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.enrolled-students li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+}
+
+.enrolled-students li span,
+.enrolled-students p,
+.enrolled-students small {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
 .analytics-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -623,4 +657,169 @@
 .btn-small {
   padding: 0.5rem 1rem;
   font-size: 0.9rem;
+}
+
+/* Keep instructor styles scoped so dashboard routes can share common class names. */
+.instructor-dashboard {
+  max-width: none;
+  padding: 0;
+  background: transparent;
+}
+
+.instructor-dashboard .dashboard-header {
+  padding: clamp(1.5rem, 3.5vw, 2.5rem);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--border-radius-lg);
+  background: linear-gradient(125deg, #123c3c, #087f75 66%, #17a985);
+  box-shadow: var(--surface-shadow-md);
+}
+
+.instructor-dashboard .welcome-section h1 {
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  letter-spacing: -0.04em;
+}
+
+.instructor-dashboard .welcome-subtitle {
+  font-size: 1rem;
+}
+
+.instructor-dashboard .instructor-stats {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 205px), 1fr));
+  gap: 0.9rem;
+}
+
+.instructor-dashboard .stat-card {
+  min-width: 0;
+  padding: 1.1rem;
+  border-radius: var(--border-radius-md);
+}
+
+.instructor-dashboard .stat-number {
+  font-size: clamp(1.4rem, 2.2vw, 1.9rem);
+  overflow-wrap: anywhere;
+}
+
+.instructor-dashboard .dashboard-content {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.instructor-dashboard .main-content,
+.instructor-dashboard .sidebar {
+  min-width: 0;
+  gap: 1.25rem;
+}
+
+.instructor-dashboard .dashboard-section,
+.instructor-dashboard .sidebar-section {
+  padding: clamp(1.1rem, 2vw, 1.6rem);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  background: var(--background-primary);
+  box-shadow: var(--surface-shadow-xs);
+}
+
+.instructor-dashboard .section-header {
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.15rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.instructor-dashboard .section-header h2 {
+  font-size: clamp(1.15rem, 2vw, 1.4rem);
+  letter-spacing: -0.025em;
+}
+
+.instructor-dashboard .courses-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 285px), 1fr));
+  gap: 0.9rem;
+}
+
+.instructor-dashboard .instructor-course {
+  border: 1px solid var(--border-color);
+  border-left: 3px solid #17a985;
+  border-radius: var(--border-radius-md);
+  background: var(--background-primary);
+}
+
+.instructor-dashboard .instructor-course h3 a {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.instructor-dashboard .instructor-course h3 a:hover {
+  color: var(--primary-700);
+}
+
+.instructor-dashboard .course-analytics,
+.instructor-dashboard .metric,
+.instructor-dashboard .activity-item,
+.instructor-dashboard .action-item {
+  background: var(--background-strong);
+  border-color: var(--border-color);
+}
+
+.instructor-dashboard .course-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.instructor-dashboard .course-actions a,
+.instructor-dashboard .course-actions button {
+  min-height: 40px;
+  border-radius: var(--border-radius-sm);
+  text-decoration: none;
+}
+
+.instructor-dashboard .btn-primary,
+.instructor-dashboard .btn-secondary,
+.instructor-dashboard .btn-success {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--border-radius-sm);
+  font-size: 0.88rem;
+  text-decoration: none;
+}
+
+.instructor-dashboard .tips-section {
+  background: linear-gradient(145deg, var(--accent-100), var(--background-primary));
+  border-color: var(--accent-300);
+}
+
+html[data-theme='dark'] .instructor-dashboard .tips-section {
+  background: var(--background-strong);
+  border-color: var(--border-color);
+}
+
+html[data-theme='dark'] .instructor-dashboard .tips-section h3,
+html[data-theme='dark'] .instructor-dashboard .tips-section .tip-item p {
+  color: var(--text-primary);
+}
+
+@media (max-width: 1100px) {
+  .instructor-dashboard .dashboard-content {
+    grid-template-columns: 1fr;
+  }
+
+  .instructor-dashboard .sidebar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .instructor-dashboard .dashboard-header {
+    padding: 1.25rem;
+  }
+
+  .instructor-dashboard .course-actions > * {
+    flex: 1 1 42%;
+  }
 }

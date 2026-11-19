@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import './styles/theme.css';
 
 // Lazy load components for better performance
@@ -22,30 +22,42 @@ const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const Certificates = lazy(() => import('./pages/Certificates'));
 const PaymentSuccess = lazy(() => import('./pages/PaymentSuccess'));
 
+const NotFound = () => (
+  <div className="not-found-page surface">
+    <p className="eyebrow">Page not found</p>
+    <h1>We can’t find that page.</h1>
+    <p>It may have moved, or the link may be out of date.</p>
+    <Link className="btn btn-primary" to="/">Back to home</Link>
+  </div>
+);
+
 function App() {
   return (
     <Router>
-      <Suspense fallback={<div>Loading...</div>}>
+      <Suspense fallback={<div className="app-loading" role="status">Loading CertifyHub…</div>}>
         <Layout>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/courses" element={<Courses />} />
-            <Route path="/instructor" element={<Instructor />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/checkout" element={<Checkout />} />
-            <Route path="/courses/:id" element={<Course />} />
-            <Route path="/courses/:id/content" element={<CourseContent />} />
-            <Route path="/create-course" element={<CreateCourse />} />
-            <Route path="/courses/:id/edit" element={<EditCourse />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/dashboard/student" element={<StudentDashboard />} />
-            <Route path="/dashboard/instructor" element={<InstructorDashboard />} />
-            <Route path="/dashboard/admin" element={<AdminDashboard />} />
-            <Route path="/certificates" element={<Certificates />} />
-            <Route path="/payment-success" element={<PaymentSuccess />} />
-          </Routes>
+          <Suspense fallback={<div className="app-loading" role="status">Loading page…</div>}>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/courses" element={<Courses />} />
+              <Route path="/instructor" element={<Instructor />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/checkout" element={<Checkout />} />
+              <Route path="/courses/:id" element={<Course />} />
+              <Route path="/courses/:id/content" element={<CourseContent />} />
+              <Route path="/create-course" element={<CreateCourse />} />
+              <Route path="/courses/:id/edit" element={<EditCourse />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/dashboard/student" element={<StudentDashboard />} />
+              <Route path="/dashboard/instructor" element={<InstructorDashboard />} />
+              <Route path="/dashboard/admin" element={<AdminDashboard />} />
+              <Route path="/certificates" element={<Certificates />} />
+              <Route path="/payment-success" element={<PaymentSuccess />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
         </Layout>
       </Suspense>
     </Router>

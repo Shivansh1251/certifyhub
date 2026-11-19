@@ -13,8 +13,14 @@ const generateCertificate = async (data) => {
 
   const fileName = `certificate_${Date.now()}.pdf`;
   const filePath = path.join(__dirname, '../../uploads', fileName);
+  const outputStream = fs.createWriteStream(filePath);
+  const pdfWriteComplete = new Promise((resolve, reject) => {
+    outputStream.once('finish', resolve);
+    outputStream.once('error', reject);
+    doc.once('error', reject);
+  });
 
-  doc.pipe(fs.createWriteStream(filePath));
+  doc.pipe(outputStream);
 
   // Page dimensions
   const pageWidth = doc.page.width;
@@ -317,6 +323,7 @@ const generateCertificate = async (data) => {
            pageWidth - 180, pageHeight - 25);
 
   doc.end();
+  await pdfWriteComplete;
 
   return `/uploads/${fileName}`;
 };

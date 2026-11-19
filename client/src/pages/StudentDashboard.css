@@ -488,3 +488,178 @@
     font-size: 2rem;
   }
 }
+
+/* Scoped dashboard polish keeps lazy-loaded dashboard styles from colliding. */
+.student-dashboard {
+  max-width: none;
+  padding: 0;
+  background: transparent;
+}
+
+.student-dashboard .dashboard-header {
+  padding: clamp(1.5rem, 3.5vw, 2.5rem);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--border-radius-lg);
+  background: linear-gradient(125deg, #173b63, #2867c9 70%, #548ff0);
+  box-shadow: var(--surface-shadow-md);
+}
+
+.student-dashboard .welcome-section h1 {
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  letter-spacing: -0.04em;
+}
+
+.student-dashboard .welcome-subtitle {
+  font-size: 1rem;
+}
+
+.student-dashboard .quick-stats {
+  gap: 0.9rem;
+}
+
+.student-dashboard .stat-card {
+  min-width: 0;
+  padding: 1.15rem;
+  border-radius: var(--border-radius-md);
+  text-align: left;
+}
+
+.student-dashboard .stat-number {
+  font-size: clamp(1.7rem, 2.5vw, 2.2rem);
+  line-height: 1.15;
+}
+
+.student-dashboard .dashboard-stat-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.student-dashboard .dashboard-stat-link:focus-visible {
+  border-radius: var(--border-radius-sm);
+}
+
+.student-dashboard .dashboard-content {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.student-dashboard .main-content,
+.student-dashboard .sidebar {
+  min-width: 0;
+  gap: 1.25rem;
+}
+
+.student-dashboard .dashboard-section,
+.student-dashboard .sidebar-section {
+  padding: clamp(1.1rem, 2vw, 1.6rem);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  background: var(--background-primary);
+  box-shadow: var(--surface-shadow-xs);
+}
+
+.student-dashboard .section-header {
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.15rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.student-dashboard .section-header h2 {
+  font-size: clamp(1.15rem, 2vw, 1.4rem);
+  letter-spacing: -0.025em;
+}
+
+.student-dashboard .courses-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 265px), 1fr));
+  gap: 0.9rem;
+}
+
+.student-dashboard .course-card {
+  min-width: 0;
+  padding: 1.2rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  background: var(--background-primary);
+  box-shadow: var(--surface-shadow-xs);
+}
+
+.student-dashboard .course-card::before {
+  height: 3px;
+}
+
+.student-dashboard .course-card h3 a {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.student-dashboard .course-card h3 a:hover {
+  color: var(--primary-700);
+}
+
+.student-dashboard .course-stats,
+.student-dashboard .assignment-item,
+.student-dashboard .quiz-item,
+.student-dashboard .empty-state-small {
+  background: var(--background-strong);
+  border-color: var(--border-color);
+}
+
+.student-dashboard .course-actions .btn-primary,
+.student-dashboard .course-actions .btn-secondary,
+.student-dashboard .section-header .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  border-radius: var(--border-radius-sm);
+  text-decoration: none;
+}
+
+.student-dashboard .btn-primary,
+.student-dashboard .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--border-radius-sm);
+  font-size: 0.88rem;
+  text-decoration: none;
+}
+
+.student-dashboard .profile-image {
+  border-color: var(--primary-200);
+}
+
+@media (max-width: 1100px) {
+  .student-dashboard .dashboard-content {
+    grid-template-columns: 1fr;
+  }
+
+  .student-dashboard .sidebar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .student-dashboard .dashboard-header {
+    padding: 1.25rem;
+  }
+
+  .student-dashboard .quick-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .student-dashboard .course-actions {
+    flex-direction: column;
+  }
+
+  .student-dashboard .course-actions > a {
+    width: 100%;
+  }
+}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import apiRequest from '../utils/api';
 import './QuizTaker.css';
 
@@ -10,33 +10,36 @@ const QuizTaker = ({ quizId, onComplete, onCancel }) => {
   const [error, setError] = useState('');
   const [timeRemaining, setTimeRemaining] = useState(null);
   const [startTime, setStartTime] = useState(null);
+  const submittedRef = useRef(false);
+  const autoSubmitAttemptedRef = useRef(false);
 
   useEffect(() => {
     loadQuiz();
   }, [quizId]);
 
   useEffect(() => {
-    // Timer logic
-    if (quiz && quiz.timeLimit && timeRemaining !== null && timeRemaining > 0) {
-      const timer = setTimeout(() => {
-        setTimeRemaining(prev => {
-          if (prev <= 1) {
-            // Auto-submit when time runs out
-            handleAutoSubmit();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-
-      return () => clearTimeout(timer);
+    if (!quiz || timeRemaining === null || isSubmitting) return undefined;
+    if (timeRemaining <= 0) {
+      if (!autoSubmitAttemptedRef.current) {
+        autoSubmitAttemptedRef.current = true;
+        submitQuiz(true);
+      }
+      return undefined;
     }
-  }, [quiz, timeRemaining]);
+    const timer = setTimeout(() => setTimeRemaining(previous => Math.max(0, previous - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [quiz, timeRemaining, isSubmitting]);
 
   const loadQuiz = async () => {
     try {
       setIsLoading(true);
       setError('');
+      submittedRef.current = false;
+      autoSubmitAttemptedRef.current = false;
+      setQuiz(null);
+      setStartTime(null);
+      setAnswers({});
+      setTimeRemaining(null);
       
       const quizData = await apiRequest(`/quizzes/single/${quizId}`, 'GET', null, true);
       setQuiz(quizData);
@@ -46,7 +49,7 @@ const QuizTaker = ({ quizId, onComplete, onCancel }) => {
         setTimeRemaining(quizData.timeLimit * 60); // Convert minutes to seconds
       }
       
-      setStartTime(new Date());
+      setStartTime(Date.now());
       
       // Initialize answers object
       const initialAnswers = {};
@@ -78,11 +81,6 @@ const QuizTaker = ({ quizId, onComplete, onCancel }) => {
     return unansweredQuestions;
   };
 
-  const handleAutoSubmit = () => {
-    // Auto-submit when time runs out
-    submitQuiz(true);
-  };
-
   const handleSubmit = (e) => {
     e.preventDefault();
     
@@ -94,34 +92,43 @@ const QuizTaker = ({ quizId, onComplete, onCancel }) => {
       if (!confirmed) return;
     }
 
-    submitQuiz(false);
+    submitQuiz(timeRemaining === 0);
   };
 
   const submitQuiz = async (isAutoSubmit = false) => {
-    if (isSubmitting) return;
+    if (submittedRef.current || isSubmitting) return;
 
+    submittedRef.current = true;
     setIsSubmitting(true);
     setError('');
 
     try {
       // Format answers for API
-      const formattedAnswers = Object.entries(answers).map(([questionIndex, selectedAnswer]) => ({
-        questionIndex: parseInt(questionIndex),
-        selectedAnswer: selectedAnswer || 'A' // Default to A if no answer selected
-      }));
+      const formattedAnswers = Object.entries(answers)
+        .filter(([, selectedAnswer]) => Boolean(selectedAnswer))
+        .map(([displayIndex, selectedAnswer]) => ({
+          questionIndex: quiz.questions[Number(displayIndex)]?.questionIndex ?? Number(displayIndex),
+          selectedAnswer,
+        }));
+      const timeTaken = startTime ? Math.max(0, Math.round((Date.now() - startTime) / 1000)) : null;
 
       const result = await apiRequest(`/quizzes/${quizId}/submit`, 'POST', {
-        answers: formattedAnswers
+        answers: formattedAnswers,
+        timeTaken,
+        isAutoSubmit,
       }, true);
 
       // Call onComplete with the result
       onComplete({
         ...result,
+        quizId,
+        quizTitle: quiz.title,
         isAutoSubmit,
-        timeTaken: startTime ? Math.round((new Date() - startTime) / 1000) : null
+        timeTaken,
       });
     } catch (err) {
       setError(err.message || 'Failed to submit quiz');
+      submittedRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -186,6 +193,8 @@ const QuizTaker = ({ quizId, onComplete, onCancel }) => {
             <span className="question-count">
               Questions: {quiz.questions?.length || 0}
             </span>
+            <span>Pass mark: {quiz.passingScore ?? 60}%</span>
+            {quiz.attemptsRemaining !== undefined && <span>Attempts left: {quiz.attemptsRemaining}</span>}
             {quiz.timeLimit && (
               <span className={`time-remaining ${getTimeWarningClass()}`}>
                 Time Remaining: {formatTime(timeRemaining)}
@@ -251,7 +260,7 @@ const QuizTaker = ({ quizId, onComplete, onCancel }) => {
           <button
             type="submit"
             className="btn-primary submit-quiz"
-            disabled={isSubmitting || timeRemaining === 0}
+            disabled={isSubmitting}
           >
             {isSubmitting ? 'Submitting...' : 'Submit Quiz'}
           </button>

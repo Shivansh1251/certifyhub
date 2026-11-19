@@ -1,28 +1,56 @@
 const Assignment = require("../models/Assignment");
 const Course = require("../models/Course");
 const { sendSuccess, sendSuccessList, sendError, sendNotFound, sendForbidden, sendConflict, sendValidationError } = require("../utils/apiResponse");
+const { issueCertificateIfEligible } = require("./certificateController");
 
 // @desc    Create a new assignment for a module
 // @route   POST /api/assignments
 // @access  Private (Instructor only)
 exports.createAssignment = async (req, res) => {
   try {
-    const { title, description, dueDate, questions, courseId, moduleId } = req.body;
+    const { title, description, dueDate, questions, rubric, passingGrade, courseId, moduleId } = req.body;
 
     // Verify instructor owns the course
     const course = await Course.findById(courseId);
     if (!course) {
       return sendNotFound(res, "Course not found");
     }
-    if (course.instructor.toString() !== req.user._id.toString()) {
+    if (course.instructor.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
       return sendForbidden(res, "Not authorized to create assignment for this course");
     }
 
+    const module = course.modules.id(moduleId);
+    if (!module) return sendNotFound(res, "Module not found");
+    if (!title?.trim() || !description?.trim() || !dueDate || (questions !== undefined && !Array.isArray(questions))) {
+      return sendValidationError(res, ["Title, project brief, and due date are required"], "Assignment details are incomplete");
+    }
+
+    const normalizedRubric = Array.isArray(rubric) ? rubric.map(item => ({
+      criterion: String(item?.criterion || '').trim(),
+      description: String(item?.description || '').trim(),
+      points: Number(item?.points),
+    })) : [];
+    if (rubric !== undefined && !Array.isArray(rubric)) {
+      return sendValidationError(res, ["Rubric must be a list of criteria"], "Invalid grading rubric");
+    }
+    if (normalizedRubric.some(item => !item.criterion || !Number.isFinite(item.points) || item.points < 0 || item.points > 100)) {
+      return sendValidationError(res, ["Each rubric criterion needs a name and a points value from 0 to 100"], "Invalid grading rubric");
+    }
+    if (normalizedRubric.length > 0 && Math.round(normalizedRubric.reduce((total, item) => total + item.points, 0) * 100) / 100 !== 100) {
+      return sendValidationError(res, ["Rubric criteria must total 100 points"], "Invalid grading rubric");
+    }
+    const normalizedPassingGrade = passingGrade === undefined || passingGrade === '' ? undefined : Number(passingGrade);
+    if (normalizedPassingGrade !== undefined && (!Number.isFinite(normalizedPassingGrade) || normalizedPassingGrade < 0 || normalizedPassingGrade > 100)) {
+      return sendValidationError(res, ["Passing grade must be between 0 and 100"], "Invalid passing grade");
+    }
+
     const assignment = new Assignment({
-      title,
-      description,
+      title: title.trim(),
+      description: description.trim(),
       dueDate,
-      questions,
+      questions: questions || [],
+      rubric: normalizedRubric,
+      ...(normalizedPassingGrade !== undefined ? { passingGrade: normalizedPassingGrade } : {}),
       course: courseId,
       module: moduleId,
     });
@@ -30,11 +58,8 @@ exports.createAssignment = async (req, res) => {
     const savedAssignment = await assignment.save();
 
     // Add to course module
-    const module = course.modules.id(moduleId);
-    if (module) {
-      module.assignments.push(savedAssignment._id);
-      await course.save();
-    }
+    module.assignments.push(savedAssignment._id);
+    await course.save();
 
     return sendSuccess(res, savedAssignment, "Assignment created successfully", 201);
   } catch (err) {
@@ -151,12 +176,14 @@ exports.submitAssignment = async (req, res) => {
     const user = await User.findById(req.user._id);
     if (user && user.progress) {
       const courseProgress = user.progress.get(assignment.course.toString()) || { completedModules: [], completedLessons: [], grades: {}, scores: {} };
-      if (!courseProgress.grades) courseProgress.grades = {};
-      courseProgress.grades[assignment._id.toString()] = 0; // Pending grade
+      const grades = courseProgress.grades instanceof Map ? courseProgress.grades : new Map(Object.entries(courseProgress.grades || {}));
+      grades.set(assignment._id.toString(), 0); // Pending grade
+      courseProgress.grades = grades;
       user.progress.set(assignment.course.toString(), courseProgress);
+      user.markModified('progress');
       await user.save();
     }
-    
+
     return sendSuccess(res, {
       message: isResubmission ? "Resubmitted successfully" : "Submitted successfully",
       fileUrl: req.file ? `/uploads/${req.file.filename}` : null,
@@ -207,7 +234,7 @@ exports.gradeAssignment = async (req, res) => {
     submission.gradedBy = req.user._id;
     
     // Determine submission status based on grade
-    const passingGrade = assignment.passingGrade || 40;
+    const passingGrade = assignment.passingGrade ?? course.passingThreshold ?? 40;
     if (numericGrade < passingGrade) {
       submission.status = 'resubmission_required';
     } else {
@@ -237,11 +264,15 @@ exports.gradeAssignment = async (req, res) => {
     const user = await User.findById(req.params.studentId);
     if (user && user.progress) {
       const courseProgress = user.progress.get(assignment.course.toString()) || { completedModules: [], completedLessons: [], grades: {}, scores: {} };
-      if (!courseProgress.grades) courseProgress.grades = {};
-      courseProgress.grades[assignment._id.toString()] = grade;
+      const grades = courseProgress.grades instanceof Map ? courseProgress.grades : new Map(Object.entries(courseProgress.grades || {}));
+      grades.set(assignment._id.toString(), numericGrade);
+      courseProgress.grades = grades;
       user.progress.set(assignment.course.toString(), courseProgress);
+      user.markModified('progress');
       await user.save();
     }
+
+    const certificateResult = await issueCertificateIfEligible(req.params.studentId, assignment.course);
     
     return sendSuccess(res, {
       grade: numericGrade,
@@ -249,7 +280,9 @@ exports.gradeAssignment = async (req, res) => {
       gradedAt: submission.gradedAt.toISOString(),
       resubmissionRequired: numericGrade < passingGrade,
       resubmissionInfo,
-      passingGrade
+      passingGrade,
+      certificateGenerated: certificateResult.certificateGenerated,
+      certificateIssuedNow: Boolean(certificateResult.issuedNow),
     }, "Assignment graded successfully");
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });

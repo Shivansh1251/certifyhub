@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import apiRequest from '../utils/api';
+import apiRequest, { serverUrl } from '../utils/api';
 import useAuth from '../hooks/useAuth';
 import './AdminDashboard.css';
 
@@ -9,8 +9,18 @@ const AdminDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [usersLoading, setUsersLoading] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
+  const [userSearch, setUserSearch] = useState('');
+  const [userQueryKey, setUserQueryKey] = useState(0);
+  const [totalUserPages, setTotalUserPages] = useState(1);
+  const [adminCourses, setAdminCourses] = useState([]);
+  const [adminCoursePage, setAdminCoursePage] = useState(1);
+  const [adminCourseTotal, setAdminCourseTotal] = useState(0);
+  const [adminCourseTotalPages, setAdminCourseTotalPages] = useState(1);
+  const [coursesLoading, setCoursesLoading] = useState(false);
+  const [coursesError, setCoursesError] = useState('');
   const [userFilters, setUserFilters] = useState({
     page: 1,
     limit: 10,
@@ -19,20 +29,27 @@ const AdminDashboard = () => {
   });
 
   useEffect(() => {
-    if (user && user.role === 'admin') {
+    if (user?.role === 'admin') {
       fetchDashboardData();
-      if (activeTab === 'users') {
-        fetchUsers();
-      }
+    } else if (user || !localStorage.getItem('token')) {
+      setLoading(false);
     }
-  }, [user, activeTab, userFilters]);
+  }, [user]);
+
+  useEffect(() => {
+    if (user?.role !== 'admin') return;
+    if (activeTab === 'users') fetchUsers();
+    if (activeTab === 'courses') fetchCourses();
+  }, [user, activeTab, userFilters.page, userFilters.limit, userFilters.role, userFilters.search, userQueryKey, adminCoursePage]);
 
   const fetchDashboardData = async () => {
+    setLoading(true);
+    setError('');
     try {
       const data = await apiRequest('/users/dashboard/admin', 'GET', null, true);
       setDashboardData(data);
     } catch (err) {
-      setError('Failed to load dashboard data');
+      setError(err.message || 'Failed to load dashboard data');
       console.error('Dashboard error:', err);
     } finally {
       setLoading(false);
@@ -40,6 +57,7 @@ const AdminDashboard = () => {
   };
 
   const fetchUsers = async () => {
+    setUsersLoading(true);
     try {
       const params = new URLSearchParams({
         page: userFilters.page.toString(),
@@ -50,8 +68,36 @@ const AdminDashboard = () => {
       
       const data = await apiRequest(`/users?${params}`, 'GET', null, true);
       setUsers(data.users || []);
+      setTotalUserPages(Math.max(1, Number(data.totalPages) || 1));
     } catch (err) {
       console.error('Error fetching users:', err);
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  const fetchCourses = async () => {
+    setCoursesLoading(true);
+    setCoursesError('');
+    try {
+      const data = await apiRequest(`/courses?sort=latest&page=${adminCoursePage}&limit=10`, 'GET', null, true, true);
+      const courseList = Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data)
+          ? data
+          : Array.isArray(data?.courses)
+            ? data.courses
+            : [];
+      setAdminCourses(courseList);
+      setAdminCourseTotal(Number(data?.meta?.total ?? data?.total ?? courseList.length) || 0);
+      setAdminCourseTotalPages(Math.max(1, Number(data?.meta?.totalPages ?? data?.totalPages) || 1));
+    } catch (err) {
+      setAdminCourses([]);
+      setAdminCourseTotal(0);
+      setAdminCourseTotalPages(1);
+      setCoursesError(err.message || 'Could not load the course catalog.');
+    } finally {
+      setCoursesLoading(false);
     }
   };
 
@@ -83,8 +129,12 @@ const AdminDashboard = () => {
 
   const handleUserSearch = (e) => {
     e.preventDefault();
-    setUserFilters({ ...userFilters, page: 1 });
+    setUserFilters((current) => ({ ...current, search: userSearch.trim(), page: 1 }));
+    setUserQueryKey((current) => current + 1);
   };
+
+  const topCourses = dashboardData?.topCourses || [];
+  const maxCourseEnrollments = Math.max(1, ...topCourses.map((course) => Number(course.enrolledCount) || 0));
 
   if (loading) {
     return (
@@ -106,7 +156,12 @@ const AdminDashboard = () => {
   }
 
   if (error) {
-    return <div className="error-message">{error}</div>;
+    return (
+      <div className="error-message" role="alert">
+        <p>{error}</p>
+        <button type="button" className="btn btn-secondary" onClick={fetchDashboardData}>Try again</button>
+      </div>
+    );
   }
 
   return (
@@ -119,25 +174,25 @@ const AdminDashboard = () => {
       </div>
 
       <div className="dashboard-tabs">
-        <button 
+        <button type="button" aria-pressed={activeTab === 'overview'}
           className={`tab ${activeTab === 'overview' ? 'active' : ''}`}
           onClick={() => setActiveTab('overview')}
         >
           📊 Overview
         </button>
-        <button 
+        <button type="button" aria-pressed={activeTab === 'users'}
           className={`tab ${activeTab === 'users' ? 'active' : ''}`}
           onClick={() => setActiveTab('users')}
         >
           👥 Users
         </button>
-        <button 
+        <button type="button" aria-pressed={activeTab === 'courses'}
           className={`tab ${activeTab === 'courses' ? 'active' : ''}`}
           onClick={() => setActiveTab('courses')}
         >
           📚 Courses
         </button>
-        <button 
+        <button type="button" aria-pressed={activeTab === 'reports'}
           className={`tab ${activeTab === 'reports' ? 'active' : ''}`}
           onClick={() => setActiveTab('reports')}
         >
@@ -203,8 +258,8 @@ const AdminDashboard = () => {
                   {dashboardData.recentCourses.map(course => (
                     <div key={course._id} className="recent-item">
                       <div className="item-info">
-                        <h4>{course.title}</h4>
-                        <p>by {course.instructor.name}</p>
+                        <h4><Link to={`/courses/${course._id}`}>{course.title}</Link></h4>
+                        <p>by {course.instructor?.name || 'Unknown instructor'}</p>
                       </div>
                       <div className="item-date">
                         {new Date(course.createdAt).toLocaleDateString()}
@@ -231,7 +286,7 @@ const AdminDashboard = () => {
                   <tbody>
                     {dashboardData.topCourses.map(course => (
                       <tr key={course._id}>
-                        <td>{course.title}</td>
+                        <td><Link to={`/courses/${course._id}`}>{course.title}</Link></td>
                         <td>{course.instructor}</td>
                         <td>{course.enrolledCount}</td>
                         <td>{course.averageRating || 0}/5</td>
@@ -256,13 +311,13 @@ const AdminDashboard = () => {
                 <input
                   type="text"
                   placeholder="Search users by name or email..."
-                  value={userFilters.search}
-                  onChange={(e) => setUserFilters({...userFilters, search: e.target.value})}
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
                   className="form-input"
                 />
                 <select
                   value={userFilters.role}
-                  onChange={(e) => setUserFilters({...userFilters, role: e.target.value, page: 1})}
+                  onChange={(e) => setUserFilters((current) => ({...current, role: e.target.value, page: 1}))}
                   className="form-select"
                 >
                   <option value="">All Roles</option>
@@ -274,6 +329,7 @@ const AdminDashboard = () => {
               </form>
             </div>
 
+            {usersLoading ? <div className="admin-table-state" role="status">Loading users…</div> : null}
             <div className="users-table">
               <table>
                 <thead>
@@ -287,13 +343,16 @@ const AdminDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
+                  {!usersLoading && users.length === 0 && (
+                    <tr><td colSpan="6" className="admin-empty-cell">No users match your search.</td></tr>
+                  )}
                   {users.map(user => (
                     <tr key={user._id}>
                       <td>
                         <div className="user-info">
                           {user.profilePicture && (
                             <img 
-                              src={`http://localhost:5000${user.profilePicture}`}
+                              src={serverUrl(user.profilePicture)}
                               alt="Profile"
                               className="user-avatar"
                             />
@@ -336,15 +395,16 @@ const AdminDashboard = () => {
 
             <div className="pagination">
               <button
-                disabled={userFilters.page <= 1}
-                onClick={() => setUserFilters({...userFilters, page: userFilters.page - 1})}
+                disabled={userFilters.page <= 1 || usersLoading}
+                onClick={() => setUserFilters((current) => ({...current, page: current.page - 1}))}
                 className="btn-secondary"
               >
                 Previous
               </button>
-              <span>Page {userFilters.page}</span>
+              <span>Page {userFilters.page} of {totalUserPages}</span>
               <button
-                onClick={() => setUserFilters({...userFilters, page: userFilters.page + 1})}
+                disabled={userFilters.page >= totalUserPages || usersLoading}
+                onClick={() => setUserFilters((current) => ({...current, page: current.page + 1}))}
                 className="btn-secondary"
               >
                 Next
@@ -355,19 +415,48 @@ const AdminDashboard = () => {
 
         {activeTab === 'courses' && (
           <div className="courses-section">
-            <div className="section-header">
-              <h2>Course Management</h2>
+            <div className="section-header admin-panel-heading">
+              <div>
+                <h2>Course catalog</h2>
+                <p>Review current courses, instructors, and enrollment activity.</p>
+              </div>
+              <button type="button" className="btn-secondary" onClick={fetchCourses} disabled={coursesLoading}>
+                {coursesLoading ? 'Refreshing…' : 'Refresh courses'}
+              </button>
             </div>
-            <div className="coming-soon">
-              <h3>Course Management Panel</h3>
-              <p>Advanced course management features will be available here including:</p>
-              <ul>
-                <li>Course approval/rejection</li>
-                <li>Content moderation</li>
-                <li>Performance analytics</li>
-                <li>Bulk course operations</li>
-              </ul>
-            </div>
+            {coursesError && <div className="admin-inline-error" role="alert">{coursesError}</div>}
+            {coursesLoading && adminCourses.length === 0 ? (
+              <div className="admin-table-state" role="status">Loading courses…</div>
+            ) : adminCourses.length === 0 ? (
+              <div className="admin-table-state">No courses are available yet.</div>
+            ) : (
+              <div className="courses-table admin-courses-table">
+                <table>
+                  <thead>
+                    <tr><th>Course</th><th>Instructor</th><th>Category</th><th>Students</th><th>Rating</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    {adminCourses.map((course) => (
+                      <tr key={course._id}>
+                        <td><Link to={`/courses/${course._id}`} className="admin-course-title">{course.title}</Link></td>
+                        <td>{course.instructor?.name || 'Unknown instructor'}</td>
+                        <td>{course.category || 'General'}</td>
+                        <td>{course.enrollmentCount ?? course.enrolledStudents?.length ?? 0}</td>
+                        <td>{Number(course.averageRating || 0).toFixed(1)} / 5</td>
+                        <td><Link to={`/courses/${course._id}`} className="btn-secondary btn-small">View</Link></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {adminCourseTotalPages > 1 && (
+              <div className="pagination" aria-label="Course catalog pages">
+                <button type="button" className="btn-secondary" disabled={adminCoursePage <= 1 || coursesLoading} onClick={() => setAdminCoursePage((current) => current - 1)}>Previous</button>
+                <span>Page {adminCoursePage} of {adminCourseTotalPages} · {adminCourseTotal} courses</span>
+                <button type="button" className="btn-secondary" disabled={adminCoursePage >= adminCourseTotalPages || coursesLoading} onClick={() => setAdminCoursePage((current) => current + 1)}>Next</button>
+              </div>
+            )}
           </div>
         )}
 
@@ -376,16 +465,31 @@ const AdminDashboard = () => {
             <div className="section-header">
               <h2>Analytics & Reports</h2>
             </div>
-            <div className="coming-soon">
-              <h3>Advanced Analytics</h3>
-              <p>Comprehensive reporting features coming soon:</p>
-              <ul>
-                <li>User engagement analytics</li>
-                <li>Course performance metrics</li>
-                <li>Revenue reports</li>
-                <li>Custom report builder</li>
-              </ul>
+            <div className="report-summary-grid">
+              <article><span>Students</span><strong>{dashboardData?.stats?.totalStudents ?? 0}</strong></article>
+              <article><span>Instructors</span><strong>{dashboardData?.stats?.totalInstructors ?? 0}</strong></article>
+              <article><span>Courses</span><strong>{dashboardData?.stats?.totalCourses ?? 0}</strong></article>
+              <article><span>Certificates issued</span><strong>{dashboardData?.stats?.totalCertificates ?? 0}</strong></article>
             </div>
+            <section className="report-course-performance">
+              <h3>Top courses by enrollment</h3>
+              {topCourses.length === 0 ? (
+                <p className="admin-table-state">Course performance data is not available yet.</p>
+              ) : topCourses.map((course) => {
+                const enrollments = Number(course.enrolledCount) || 0;
+                return (
+                  <div className="report-course-row" key={course._id}>
+                    <div className="report-course-label">
+                      <Link to={`/courses/${course._id}`}>{course.title}</Link>
+                      <span>{enrollments} {enrollments === 1 ? 'student' : 'students'} · {Number(course.averageRating || 0).toFixed(1)} ★</span>
+                    </div>
+                    <div className="report-course-track" aria-label={`${enrollments} enrollments`}>
+                      <span style={{ width: `${Math.round((enrollments / maxCourseEnrollments) * 100)}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </section>
           </div>
         )}
       </div>

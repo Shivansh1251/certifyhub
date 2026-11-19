@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import apiRequest from '../utils/api';
+import { API_BASE } from '../utils/api';
 import './Certificate.css';
 
 const Certificate = ({ certificate, onDownload }) => {
@@ -16,7 +16,7 @@ const Certificate = ({ certificate, onDownload }) => {
     try {
       // Use the direct download endpoint
       const response = await fetch(
-        `http://localhost:5000/api/certificates/download/${certificate.course._id}?userId=${certificate.student._id}`,
+        `${API_BASE}/certificates/download/${certificate.course._id}?userId=${certificate.student._id}`,
         {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -59,7 +59,7 @@ const Certificate = ({ certificate, onDownload }) => {
     try {
       // Open PDF in new tab for viewing
       const response = await fetch(
-        `http://localhost:5000/api/certificates/download/${certificate.course._id}?userId=${certificate.student._id}`,
+        `${API_BASE}/certificates/download/${certificate.course._id}?userId=${certificate.student._id}`,
         {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`

@@ -45,6 +45,7 @@ const userSchema = new mongoose.Schema(
         completedLessons: { type: [String], default: [] },
         grades: { type: Map, of: Number, default: {} },
         scores: { type: Map, of: Number, default: {} },
+        notes: { type: Map, of: String, default: {} },
       },
       default: {},
     },

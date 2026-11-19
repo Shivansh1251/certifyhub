@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import apiRequest from '../utils/api';
 import './Register.css';
 
@@ -14,6 +14,7 @@ const Register = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -32,7 +33,7 @@ const Register = () => {
 
       await apiRequest('/auth/register', 'POST', formData, false);
       alert('Registration successful! Please sign in.');
-      navigate('/login');
+      navigate('/login', { state: location.state, replace: true });
     } catch (err) {
       setError(err.message || 'Registration failed. Please try again.');
     } finally {

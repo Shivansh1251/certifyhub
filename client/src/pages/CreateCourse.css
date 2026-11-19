@@ -1,59 +1,117 @@
-/* Create Course page styles */
-#create-course-form {
-  max-width: 600px;
-  margin: 2rem auto;
-  padding: 2.5rem;
-  background: var(--background-primary);
-  border-radius: var(--border-radius-md);
-  box-shadow: var(--box-shadow-md);
+.create-course-page {
+  max-width: 880px;
+  margin: 0 auto;
 }
 
-#create-course-form h1 {
+.create-course-heading {
+  margin: 0 auto 1.25rem;
+  max-width: 720px;
   text-align: center;
-  color: var(--primary-dark);
-  margin-bottom: 2rem;
 }
 
-#create-course-form label {
-  font-weight: 500;
+.create-course-heading h1 {
+  margin: 0.45rem 0 0.65rem;
+  font-size: clamp(2rem, 4vw, 2.65rem);
+  letter-spacing: -0.045em;
+}
+
+.create-course-heading > p:last-child {
+  max-width: 620px;
+  margin: 0 auto;
+  color: var(--text-secondary);
+}
+
+#create-course-form {
+  display: grid;
+  gap: 1rem;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: clamp(1.2rem, 3vw, 2rem);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  background: var(--background-primary);
+  box-shadow: var(--surface-shadow-sm);
+}
+
+.create-course-field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.create-course-field label {
   color: var(--text-primary);
-  margin-bottom: 0.5rem;
-  display: block;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
-#create-course-form input,
-#create-course-form textarea,
-#create-course-form select {
+.create-course-field input,
+.create-course-field textarea,
+.create-course-field select {
   width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #d1d5db;
+  min-height: 46px;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border-color);
   border-radius: var(--border-radius-sm);
-  font-size: 1rem;
-  margin-bottom: 1.5rem;
-  transition: var(--transition);
+  color: var(--text-primary);
+  background: var(--background-primary);
+  font: inherit;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-#create-course-form input:focus,
-#create-course-form textarea:focus,
-#create-course-form select:focus {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+.create-course-field textarea {
+  min-height: 150px;
+  resize: vertical;
+}
+
+.create-course-field input:focus,
+.create-course-field textarea:focus,
+.create-course-field select:focus {
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(40, 103, 201, 0.14);
   outline: none;
 }
 
-#create-course-form button {
-  width: 100%;
-  padding: 1rem;
-  background-color: var(--primary-color);
-  color: white;
-  border: none;
-  border-radius: var(--border-radius-sm);
-  font-size: 1.1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: var(--transition);
+.create-course-field small {
+  color: var(--text-muted);
+  font-size: 0.82rem;
 }
 
-#create-course-form button:hover {
-  background-color: var(--primary-dark);
+.create-course-form-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.create-course-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.create-course-error {
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(220, 58, 58, 0.25);
+  border-radius: var(--border-radius-sm);
+  color: var(--error-color);
+  background: rgba(220, 58, 58, 0.07);
+}
+
+@media (max-width: 600px) {
+  .create-course-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .create-course-actions > button {
+    flex: 1 1 100%;
+  }
+}
+
+@media (min-width: 601px) and (max-width: 850px) {
+  .create-course-form-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }

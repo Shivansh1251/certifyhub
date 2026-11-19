@@ -4,6 +4,7 @@ const {
   createQuiz,
   getQuizzes,
   getQuiz,
+  getQuizAttempts,
   submitQuiz,
   generateQuiz,
 } = require("../controllers/quizController");
@@ -13,6 +14,7 @@ router.route("/").post(protect, createQuiz);
 router.route("/generate").post(protect, generateQuiz);
 router.route("/:courseId").get(protect, getQuizzes);
 router.route("/single/:id").get(protect, getQuiz);
+router.route("/:id/attempts").get(protect, getQuizAttempts);
 router.route("/:id/submit").post(protect, submitQuiz);
 
 module.exports = router;

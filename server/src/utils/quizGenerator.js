@@ -104,10 +104,10 @@ Ensure all questions are based on the provided content and are educationally app
         return {
           text: q.text,
           options: {
-            A: q.options.A || 'Option A',
-            B: q.options.B || 'Option B',
-            C: q.options.C || 'Option C',
-            D: q.options.D || 'Option D'
+            optionA: q.options.optionA || q.options.A || 'Option A',
+            optionB: q.options.optionB || q.options.B || 'Option B',
+            optionC: q.options.optionC || q.options.C || 'Option C',
+            optionD: q.options.optionD || q.options.D || 'Option D'
           },
           correctAnswer: q.correctAnswer.toUpperCase(),
           explanation: q.explanation,

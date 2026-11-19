@@ -11,10 +11,11 @@ const router = express.Router();
 router.post("/register", upload.single("profilePicture"), registerUser);
 
 // @route   POST /api/auth/login
-// @desc    Login user & send OTP
+// @desc    Login user with email and password
 // @access  Public
 router.post("/login", loginUser);
 
+// Mail OTP login is temporarily disabled; this endpoint is retained for later re-enablement.
 // @route   POST /api/auth/verify-otp
 // @desc    Verify OTP and complete login
 // @access  Public

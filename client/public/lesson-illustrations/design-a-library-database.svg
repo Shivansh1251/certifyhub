@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500" role="img" aria-labelledby="title description">
+  <title id="title">Design a library database concept map</title>
+  <desc id="description">Three connected lesson concepts: Title, Copy, Loan.</desc>
+  <defs>
+    <linearGradient id="canvas" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f4f8ff"/><stop offset="1" stop-color="#f5f3ff"/></linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#2563eb"/><stop offset="1" stop-color="#7c3aed"/></linearGradient>
+  </defs>
+  <rect width="1200" height="500" rx="32" fill="url(#canvas)" />
+  <circle cx="1120" cy="86" r="112" fill="#dbeafe" opacity=".45" />
+  <circle cx="92" cy="438" r="96" fill="#ede9fe" opacity=".45" />
+  <text x="54" y="74" font-family="Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="2.4" fill="#2563eb">LESSON CONCEPT MAP</text>
+  <text x="54" y="132" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#13233e">Design a library database</text>
+  <text x="54" y="169" font-family="Arial, sans-serif" font-size="17" fill="#64748b">Connect the ideas, then use the flashcards to practise retrieval.</text>
+  <rect x="54" y="184" width="1092" height="4" rx="2" fill="url(#accent)" opacity=".7" />
+  <path d="M394 327h35m-8 -8 8 8-8 8" fill="none" stroke="#93a9c8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><path d="M775 327h35m-8 -8 8 8-8 8" fill="none" stroke="#93a9c8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  
+      <g>
+        <rect x="54" y="215" width="330" height="228" rx="24" fill="#ffffff" stroke="#dce7f5" stroke-width="2" />
+        <circle cx="89" cy="255" r="20" fill="#dbeafe" />
+        <text x="89" y="262" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#1d4ed8">01</text>
+        <text x="80" y="306" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#13233e">Title</text>
+        <path d="M80 324h58" stroke="#60a5fa" stroke-width="4" stroke-linecap="round" />
+        <text x="80" y="359" font-family="Arial, sans-serif" font-size="17" fill="#52637c"><tspan x="80" dy="0">A catalog description of a work,</tspan><tspan x="80" dy="29">which may have multiple physical…</tspan></text>
+        <text x="80" y="416" font-family="Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1.5" fill="#2563eb">RECALL  ·  REVEAL  ·  APPLY</text>
+      </g>
+      <g>
+        <rect x="435" y="215" width="330" height="228" rx="24" fill="#ffffff" stroke="#dce7f5" stroke-width="2" />
+        <circle cx="470" cy="255" r="20" fill="#dcfce7" />
+        <text x="470" y="262" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#1d4ed8">02</text>
+        <text x="461" y="306" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#13233e">Copy</text>
+        <path d="M461 324h58" stroke="#60a5fa" stroke-width="4" stroke-linecap="round" />
+        <text x="461" y="359" font-family="Arial, sans-serif" font-size="17" fill="#52637c"><tspan x="461" dy="0">One lendable physical or digital</tspan><tspan x="461" dy="29">instance of a catalog title.</tspan></text>
+        <text x="461" y="416" font-family="Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1.5" fill="#2563eb">RECALL  ·  REVEAL  ·  APPLY</text>
+      </g>
+      <g>
+        <rect x="816" y="215" width="330" height="228" rx="24" fill="#ffffff" stroke="#dce7f5" stroke-width="2" />
+        <circle cx="851" cy="255" r="20" fill="#ede9fe" />
+        <text x="851" y="262" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#1d4ed8">03</text>
+        <text x="842" y="306" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#13233e">Loan</text>
+        <path d="M842 324h58" stroke="#60a5fa" stroke-width="4" stroke-linecap="round" />
+        <text x="842" y="359" font-family="Arial, sans-serif" font-size="17" fill="#52637c"><tspan x="842" dy="0">An event recording who borrowed a</tspan><tspan x="842" dy="29">copy and when it was returned.</tspan></text>
+        <text x="842" y="416" font-family="Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1.5" fill="#2563eb">RECALL  ·  REVEAL  ·  APPLY</text>
+      </g>
+</svg>

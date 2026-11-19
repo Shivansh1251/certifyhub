@@ -118,6 +118,34 @@ A modern, full-stack Learning Management System built with React.js and Node.js.
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:5000
 
+### Demo accounts and courses
+
+After MongoDB is running, create working demo data:
+
+```powershell
+cd server
+npm run seed:demo
+```
+
+Demo credentials:
+
+- Instructor: `instructor@certifyhub.demo` / `Instructor123!`
+- Student: `student@certifyhub.demo` / `Student123!`
+
+The seed creates five demo courses owned by the demo instructor. Each includes at least five curriculum modules with lesson content:
+
+- **DBMS Fundamentals - Free Starter Course** — free enrollment.
+- **DBMS Mastery - SQL, Design & Performance** — paid through Razorpay.
+- **Full-Stack Cloud Engineer** — paid through Razorpay.
+- **Product Design Accelerator** — free enrollment.
+- **AI for Business Operations** — paid through Razorpay.
+
+The instructor dashboard shows enrollment counts, enrolled student names, progress, assignment/quiz activity, and estimated revenue. Paid enrollment must be completed through Razorpay; direct API enrollment is rejected for paid courses.
+
+### Instructor course materials
+
+Course overviews can include prerequisites, learning outcomes, and estimated study hours. Lessons support text, video, PDF, document, slide, and dataset content, plus objectives, duration, reading links, sample files, and CSV/Excel/JSON/notebook datasets. Assignments can include project tasks and an optional grading rubric; rubric criteria must add up to 100 points. Learners can submit written work or a supported file, and instructors can grade it with feedback.
+
 ## 📁 Project Structure
 
 ```

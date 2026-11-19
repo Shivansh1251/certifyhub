@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import apiRequest from '../utils/api';
+import { useParams, Link } from 'react-router-dom';
+import apiRequest, { API_BASE } from '../utils/api';
 import useAuth from '../hooks/useAuth';
 import './Course.css';
 
@@ -80,7 +80,7 @@ const Course = () => {
     try {
       // Use the direct download endpoint
       const response = await fetch(
-        `http://localhost:5000/api/certificates/download/${id}`,
+        `${API_BASE}/certificates/download/${id}`,
         {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -102,7 +102,7 @@ const Course = () => {
       } else {
         const errorData = await response.json();
         if (errorData.message.includes('not found')) {
-          alert('Certificate not yet available. Complete all course requirements and wait for instructor approval.');
+          alert('Certificate not yet available. Complete all required lessons, assignments, and quizzes to reach 100% progress.');
         } else {
           alert('Failed to download certificate: ' + errorData.message);
         }
@@ -157,6 +157,9 @@ const Course = () => {
     return <p>Loading course details...</p>;
   }
 
+  const isEnrolled = Boolean(user && Array.isArray(course.enrolledStudents) && course.enrolledStudents.some(student => student?._id === user._id));
+  const loginReturnTo = course.price > 0 ? `/checkout?courseId=${course._id}` : `/courses/${course._id}`;
+
   return (
     <div>
       <section className="course-details" id="courseDetails">
@@ -164,12 +167,29 @@ const Course = () => {
         <p id="courseDescription">{course.description}</p>
         <p><strong>Instructor:</strong> {course.instructor && course.instructor.name ? course.instructor.name : 'N/A'}</p>
         <p><strong>Price:</strong> {course.price === 0 ? 'Free' : `INR ${course.price}`}</p>
+        {course.estimatedDurationHours > 0 && <p><strong>Estimated study time:</strong> {course.estimatedDurationHours} hours</p>}
+        {(course.prerequisites || []).length > 0 && (
+          <div className="course-learning-list">
+            <h3>Before you begin</h3>
+            <ul>{course.prerequisites.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul>
+          </div>
+        )}
+        {(course.learningOutcomes || []).length > 0 && (
+          <div className="course-learning-list">
+            <h3>What you’ll learn</h3>
+            <ul>{course.learningOutcomes.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul>
+          </div>
+        )}
 
         {/* Show Go to Course if enrolled, else Enroll button */}
-        {user && Array.isArray(course.enrolledStudents) && course.enrolledStudents.some(s => s && s._id === user._id) ? (
-          <a href={`/courses/${course._id}/content`} className="go-to-course-btn">Go to Course</a>
+        {isEnrolled ? (
+          <Link to={`/courses/${course._id}/content`} className="go-to-course-btn">Go to Course</Link>
         ) : (
-          user && user.role === 'student' && <button id="enrollBtn" onClick={handleEnroll}>Enroll</button>
+          !user ? (
+            <Link className="go-to-course-btn" to="/login" state={{ from: loginReturnTo }}>Login to enroll</Link>
+          ) : user.role === 'student' ? (
+            <button id="enrollBtn" onClick={handleEnroll}>{course.price > 0 ? 'Pay & enroll' : 'Enroll'}</button>
+          ) : null
         )}
 
         {/* Certificate Section - Only show if course is completed and student is eligible */}
@@ -210,14 +230,14 @@ const Course = () => {
               <li>✅ Complete all course modules</li>
               <li>✅ Submit all assignments with passing grades</li>
               <li>✅ Pass all quizzes</li>
-              <li>⏳ Wait for instructor to mark the course as complete</li>
+              <li>🎓 Your certificate is generated automatically when progress reaches 100%</li>
             </ul>
           </div>
         )}
 
         {/* Instructor: Edit Course button */}
         {user && course.instructor && user._id === course.instructor._id && (
-          <a href={`/courses/${course._id}/edit`} className="edit-course-btn">Edit Course</a>
+          <Link to={`/courses/${course._id}/edit`} className="edit-course-btn">Edit Course</Link>
         )}
 
         {/* Show enrolled students if user is instructor of this course */}
@@ -251,6 +271,57 @@ const Course = () => {
               ))}
             </ul>
           </div>
+        )}
+      </section>
+
+      <section className="course-syllabus" aria-labelledby="course-syllabus-title">
+        <div className="course-syllabus__header">
+          <div>
+            <p className="eyebrow">Course outline</p>
+            <h2 id="course-syllabus-title">Syllabus</h2>
+          </div>
+          <span>{course.modules?.length || 0} modules · {(course.modules || []).reduce((total, module) => total + (module.lessons?.length || 0), 0)} lessons</span>
+        </div>
+
+        {course.modules?.length ? (
+          <ol className="syllabus-modules">
+            {course.modules.map((module, index) => (
+              <li className="syllabus-module" key={module._id || `${module.title}-${index}`}>
+                <div className="syllabus-module__heading">
+                  <span>Module {String(index + 1).padStart(2, '0')}</span>
+                  <h3>{module.title}</h3>
+                </div>
+
+                {module.lessons?.length > 0 && (
+                  <ul className="syllabus-lessons">
+                    {module.lessons.map((lesson, lessonIndex) => (
+                      <li key={lesson._id || `${lesson.title}-${lessonIndex}`}>
+                        <span className="syllabus-lesson__icon" aria-hidden="true">✓</span>
+                        <div>
+                          <strong>{lesson.title}</strong>
+                          {lesson.summary && <p>{lesson.summary}</p>}
+                        </div>
+                        {lesson.duration > 0 && <small>{lesson.duration} min</small>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {(module.assignments?.length > 0 || module.quizzes?.length > 0) && (
+                  <div className="syllabus-assessments">
+                    {(module.assignments || []).filter(Boolean).map((assignment, itemIndex) => (
+                      <span key={assignment._id || `assignment-${itemIndex}`}>Assignment · {assignment.title}</span>
+                    ))}
+                    {(module.quizzes || []).filter(Boolean).map((quiz, itemIndex) => (
+                      <span key={quiz._id || `quiz-${itemIndex}`}>Quiz · {quiz.title}</span>
+                    ))}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="syllabus-empty">The instructor is still preparing the course outline.</p>
         )}
       </section>
 

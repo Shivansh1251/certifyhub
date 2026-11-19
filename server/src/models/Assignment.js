@@ -48,6 +48,12 @@ const submissionSchema = new mongoose.Schema({
   }
 });
 
+const rubricCriterionSchema = new mongoose.Schema({
+  criterion: { type: String, required: true, trim: true, maxlength: 120 },
+  description: { type: String, default: "", trim: true, maxlength: 500 },
+  points: { type: Number, required: true, min: 0, max: 100 },
+}, { _id: false });
+
 const assignmentSchema = new mongoose.Schema(
   {
     title: {
@@ -68,6 +74,10 @@ const assignmentSchema = new mongoose.Schema(
         type: { type: String, enum: ["text", "file"], default: "text" },
       },
     ],
+    rubric: {
+      type: [rubricCriterionSchema],
+      default: [],
+    },
     submissions: [submissionSchema],
     course: {
       type: mongoose.Schema.Types.ObjectId,

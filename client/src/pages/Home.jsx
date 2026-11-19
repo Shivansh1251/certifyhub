@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import apiRequest from '../utils/api';
+import useAuth from '../hooks/useAuth';
 import './Home.css';
 
 const highlightStats = [
-  { value: '4.9/5', label: 'Learner rating' },
-  { value: '120+', label: 'Career tracks' },
-  { value: '65%', label: 'Avg. salary boost' },
+  { value: 'Learn', label: 'at your own pace' },
+  { value: 'Practice', label: 'with real course work' },
+  { value: 'Earn', label: 'course certificates' },
 ];
 
 const curatedCategories = ['Development', 'Data Science', 'Design', 'Marketing', 'Business','Programming'];
@@ -44,35 +45,58 @@ const learningPillars = [
   },
 ];
 
-const partnerOrgs = ['Northwind U', 'Nova Labs', 'CloudForge', 'Pulse Analytics', 'Lumina Health'];
-
 const Home = () => {
+  const { user } = useAuth();
   const [courses, setCourses] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [category, setCategory] = useState('');
   const [sortBy, setSortBy] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    loadCourses();
-  }, [searchTerm, category, sortBy]);
+    let isCurrentRequest = true;
+    setLoading(true);
+    setError('');
+    const timeout = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams();
+        if (searchTerm.trim()) params.append('keyword', searchTerm.trim());
+        if (category) params.append('category', category);
+        if (sortBy) params.append('sort', sortBy);
 
-  const loadCourses = async () => {
-    try {
-      const params = new URLSearchParams();
-      if (searchTerm) params.append('keyword', searchTerm);
-      if (category) params.append('category', category);
-      if (sortBy) params.append('sort', sortBy);
+        const queryString = params.toString();
+        const data = await apiRequest(queryString ? `/courses?${queryString}` : '/courses', 'GET');
+        const courseList = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.courses)
+            ? data.courses
+            : Array.isArray(data?.data)
+              ? data.data
+              : [];
 
-      const queryString = params.toString();
-      const endpoint = queryString ? `/courses?${queryString}` : '/courses';
+        if (isCurrentRequest) setCourses(courseList);
+      } catch (requestError) {
+        if (isCurrentRequest) {
+          setCourses([]);
+          setError(requestError?.message || 'We could not load courses. Please try again.');
+        }
+      } finally {
+        if (isCurrentRequest) setLoading(false);
+      }
+    }, 250);
 
-      const data = await apiRequest(endpoint, 'GET');
-      const coursesArray = Array.isArray(data) ? data : data.courses || [];
-      setCourses(coursesArray);
-    } catch (error) {
-      console.error('Failed to load courses', error);
-      setCourses([]);
-    }
+    return () => {
+      isCurrentRequest = false;
+      clearTimeout(timeout);
+    };
+  }, [searchTerm, category, sortBy, refreshKey]);
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setCategory('');
+    setSortBy('');
   };
 
   return (
@@ -91,7 +115,7 @@ const Home = () => {
               Explore catalog
             </Link>
             <Link to="/about" className="btn btn-secondary">
-              Talk to an advisor
+              How it works
             </Link>
           </div>
 
@@ -104,7 +128,7 @@ const Home = () => {
             ))}
             <div className="stat stat--courses">
               <span className="stat-value">{courses.length}</span>
-              <span className="stat-label">Active courses</span>
+              <span className="stat-label">Available courses</span>
             </div>
           </div>
         </div>
@@ -131,7 +155,7 @@ const Home = () => {
 
           <div className="panel-chips">
             <span>Popular focus areas</span>
-            <div className="chip-group">
+            <div className="chip-group" role="group" aria-label="Popular focus areas">
               {curatedCategories.map((item) => (
                 <button
                   key={item}
@@ -146,9 +170,14 @@ const Home = () => {
           </div>
 
           <div className="panel-selects">
-            <label className="form-label">
+            <label className="form-label" htmlFor="hero-category">
               Category
-              <select value={category} onChange={(e) => setCategory(e.target.value)} className="form-select">
+              <select
+                id="hero-category"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="form-select"
+              >
                 <option value="">All</option>
                 {curatedCategories.map((item) => (
                   <option value={item} key={item}>
@@ -158,9 +187,14 @@ const Home = () => {
               </select>
             </label>
 
-            <label className="form-label">
+            <label className="form-label" htmlFor="hero-sort">
               Sort by
-              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="form-select">
+              <select
+                id="hero-sort"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="form-select"
+              >
                 <option value="">Recommended</option>
                 <option value="latest">Latest</option>
                 <option value="popular">Popular</option>
@@ -174,11 +208,11 @@ const Home = () => {
       </section>
 
       <section className="trusted-strip surface-muted">
-        <p>In partnership with universities & teams such as</p>
+        <p>Everything you need to keep moving forward</p>
         <div className="trusted-strip__logos">
-          {partnerOrgs.map((org) => (
-            <span key={org}>{org}</span>
-          ))}
+          <span>Instructor-led courses</span>
+          <span>Quizzes & assignments</span>
+          <span>Course certificates</span>
         </div>
       </section>
 
@@ -193,17 +227,24 @@ const Home = () => {
           </Link>
         </div>
         <div className="tracks-grid">
-          {featuredTracks.map((track) => (
-            <article className="track-card surface" key={track.title}>
-              <span className="badge badge-accent">Career Track</span>
-              <h3>{track.title}</h3>
-              <p className="track-duration">{track.duration}</p>
-              <p className="track-outcome">{track.outcome}</p>
-              <Link to="/courses" className="btn btn-secondary">
-                View syllabus
-              </Link>
-            </article>
-          ))}
+          {featuredTracks.map((track) => {
+            const matchingCourse = courses.find(course => course.title?.toLowerCase() === track.title.toLowerCase());
+            const syllabusPath = matchingCourse
+              ? `/courses/${matchingCourse._id}`
+              : `/courses?keyword=${encodeURIComponent(track.title)}`;
+
+            return (
+              <article className="track-card surface" key={track.title}>
+                <span className="badge badge-accent">Career Track</span>
+                <h3>{track.title}</h3>
+                <p className="track-duration">{track.duration}</p>
+                <p className="track-outcome">{track.outcome}</p>
+                <Link to={syllabusPath} className="btn btn-secondary">
+                  View syllabus
+                </Link>
+              </article>
+            );
+          })}
         </div>
       </section>
 
@@ -222,24 +263,57 @@ const Home = () => {
             <p className="eyebrow">Top picks for you</p>
             <h2>Featured courses</h2>
           </div>
-          <p className="course-count">Showing {courses.length} courses</p>
+          <div className="course-count-wrap">
+            <p className="course-count" aria-live="polite">
+              {loading ? 'Updating courses…' : `Showing ${Math.min(courses.length, 3)} of ${courses.length} courses`}
+            </p>
+            {(searchTerm || category || sortBy) && (
+              <button className="btn btn-ghost clear-filters" type="button" onClick={clearFilters}>
+                Clear filters
+              </button>
+            )}
+            <Link to="/courses" className="link-forward">Browse all courses →</Link>
+          </div>
         </div>
 
-        {courses.length === 0 ? (
+        {loading ? (
+          <div className="course-loading surface-muted" role="status">
+            <span className="loading-dot" aria-hidden="true" />
+            <span>Finding courses for you…</span>
+          </div>
+        ) : error ? (
+          <div className="no-courses surface-muted" role="alert">
+            <h3>We couldn’t load the course catalog</h3>
+            <p>{error}</p>
+            <button className="btn btn-secondary" type="button" onClick={() => setRefreshKey((current) => current + 1)}>
+              Try again
+            </button>
+          </div>
+        ) : courses.length === 0 ? (
           <div className="no-courses surface-muted">
-            <h3>No courses found</h3>
-            <p>Try adjusting your search, filters, or explore another category.</p>
+            <h3>{searchTerm || category || sortBy ? 'No courses match those filters' : 'No courses available yet'}</h3>
+            <p>{searchTerm || category || sortBy ? 'Try a different keyword or clear your filters.' : 'Check back soon for new courses.'}</p>
+            {(searchTerm || category || sortBy) && (
+              <button className="btn btn-secondary" type="button" onClick={clearFilters}>Clear filters</button>
+            )}
           </div>
         ) : (
           <div className="courses-list">
-            {courses.map((course) => (
+            {courses.slice(0, 3).map((course) => {
+              const isEnrolled = Boolean(user?.enrolledCourses?.some((enrollment) => {
+                const enrolledCourse = enrollment?.course || enrollment;
+                return String(enrolledCourse?._id || enrolledCourse) === String(course._id);
+              }));
+              const isFree = Number(course.price) === 0;
+              const loginReturnTo = isFree ? `/courses/${course._id}` : `/checkout?courseId=${course._id}`;
+              return (
               <article key={course._id} className="course-card surface">
                 <div className="course-card__header">
                   <div>
                     <span className="badge">{course.category || 'General'}</span>
                     <h3>{course.title}</h3>
                   </div>
-                  <span className="course-price">{course.price === 0 ? 'Free' : `INR ${course.price}`}</span>
+                  <span className="course-price">{isFree ? 'Free' : `INR ${Number(course.price).toLocaleString('en-IN')}`}</span>
                 </div>
                 <p className="course-description">{course.description}</p>
                 <div className="course-meta">
@@ -258,7 +332,15 @@ const Home = () => {
                   <Link to={`/courses/${course._id}`} className="btn btn-soft">
                     View details
                   </Link>
-                  {course.price === 0 ? (
+                  {isEnrolled ? (
+                    <Link to={`/courses/${course._id}/content`} className="btn btn-primary">
+                      Go to course
+                    </Link>
+                  ) : !user ? (
+                    <Link to="/login" state={{ from: loginReturnTo }} className="btn btn-primary">
+                      Login to enroll
+                    </Link>
+                  ) : user.role !== 'student' ? null : isFree ? (
                     <Link to={`/courses/${course._id}`} className="btn btn-primary">
                       Enroll for free
                     </Link>
@@ -269,7 +351,7 @@ const Home = () => {
                   )}
                 </div>
               </article>
-            ))}
+            );})}
           </div>
         )}
       </section>

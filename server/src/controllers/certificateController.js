@@ -14,50 +14,113 @@ const path = require('path');
 // @access  Private (Instructor)
 exports.generateCertificate = async (req, res) => {
   try {
-    const { studentId, courseId, grade } = req.body;
-
-    // Verify instructor owns the course
+    const { studentId, courseId } = req.body;
     const course = await Course.findById(courseId);
-    if (!course || course.instructor.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorized" });
-    }
+    if (!course) return sendNotFound(res, "Course not found");
+    if (course.instructor.toString() !== req.user._id.toString() && req.user.role !== 'admin') return sendForbidden(res, "Not authorized");
+    if (!course.isCompletedByInstructor) return sendConflict(res, "Mark the course as complete before issuing certificates.");
 
-    // Check if certificate already exists
-    const existingCert = await Certificate.findOne({ student: studentId, course: courseId });
-    if (existingCert) {
-      return res.status(400).json({ message: "Certificate already generated" });
-    }
-
-    // Generate unique certificate ID
-    const certificateId = 'CERT-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9).toUpperCase();
-    
-    // Generate PDF certificate (returns file path)
     const student = await User.findById(studentId);
+    if (!student) return sendNotFound(res, "Student not found");
+    if (!course.enrolledStudents.some(enrolledStudent => (enrolledStudent._id || enrolledStudent).toString() === student._id.toString())) {
+      return sendForbidden(res, "This student is not enrolled in the course.");
+    }
+    const eligibility = await checkStudentEligibility(student, course);
+    if (!eligibility.eligible) return sendConflict(res, eligibility.reason);
+
+    const existingCert = await Certificate.findOne({ student: studentId, course: courseId });
+    if (existingCert) return sendSuccess(res, existingCert, "Certificate already exists");
+
+    const certificateId = 'CERT-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9).toUpperCase();
     const instructor = await User.findById(course.instructor);
     const certificateUrl = await pdfGenerator.generateCertificate({
       studentName: student.name,
       courseTitle: course.title,
       completionDate: new Date(),
-      instructorName: instructor.name,
+      instructorName: instructor?.name || 'Course Instructor',
       certificateId: certificateId,
-      grade: grade || 'Pass',
-      overallScore: null,
+      grade: eligibility.grade || 'Pass',
+      overallScore: eligibility.overallScore,
     });
 
     const certificate = new Certificate({
       student: studentId,
       course: courseId,
-      grade,
+      grade: eligibility.grade || 'Pass',
+      overallScore: eligibility.overallScore,
       certificateUrl,
       certificateId: certificateId,
       issuedBy: req.user._id,
+      verificationUrl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/verify/${certificateId}`,
     });
 
     await certificate.save();
 
-    res.status(201).json({ message: "Certificate generated", certificate });
+    return sendSuccess(res, certificate, "Certificate generated", 201);
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+exports.issueCertificateIfEligible = async (studentId, courseId) => {
+  try {
+    const [student, course] = await Promise.all([
+      User.findById(studentId),
+      Course.findById(courseId),
+    ]);
+
+    if (!student || !course) {
+      return { eligible: false, certificateGenerated: false, reason: 'Student or course was not found.' };
+    }
+
+    const existingCertificate = await Certificate.findOne({ student: student._id, course: course._id });
+    if (existingCertificate) {
+      return {
+        eligible: true,
+        certificateGenerated: true,
+        alreadyIssued: true,
+        certificate: existingCertificate,
+      };
+    }
+
+    const eligibility = await checkStudentEligibility(student, course);
+    if (!eligibility.eligible) {
+      return { ...eligibility, certificateGenerated: false };
+    }
+
+    const certificateId = `CERT-${Date.now()}-${Math.random().toString(36).slice(2, 11).toUpperCase()}`;
+    const instructor = await User.findById(course.instructor);
+    const certificateUrl = await pdfGenerator.generateCertificate({
+      studentName: student.name,
+      courseTitle: course.title,
+      completionDate: new Date(),
+      instructorName: instructor?.name || 'Course Instructor',
+      certificateId,
+      grade: eligibility.grade || 'Pass',
+      overallScore: eligibility.overallScore,
+    });
+
+    const certificate = await new Certificate({
+      student: student._id,
+      course: course._id,
+      grade: eligibility.grade || 'Pass',
+      overallScore: eligibility.overallScore,
+      certificateUrl,
+      certificateId,
+      issuedBy: course.instructor,
+      verificationUrl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/verify/${certificateId}`,
+    }).save();
+
+    return { eligible: true, certificateGenerated: true, issuedNow: true, certificate };
+  } catch (error) {
+    if (error.code === 11000) {
+      const existingCertificate = await Certificate.findOne({ student: studentId, course: courseId });
+      if (existingCertificate) {
+        return { eligible: true, certificateGenerated: true, alreadyIssued: true, certificate: existingCertificate };
+      }
+    }
+    console.error('Automatic certificate issuance failed:', error);
+    return { eligible: false, certificateGenerated: false, reason: 'Certificate generation failed. It can be retried from the course page.' };
   }
 };
 
@@ -106,10 +169,23 @@ exports.markCourseComplete = async (req, res) => {
     let certificatesGenerated = 0;
 
     for (const student of course.enrolledStudents) {
-      const eligibilityResult = await checkStudentEligibility(student, course, true);
+      const eligibilityResult = await checkStudentEligibility(student, course);
       
       if (eligibilityResult.eligible) {
         try {
+          const existingCertificate = await Certificate.findOne({ student: student._id, course: course._id });
+          if (existingCertificate) {
+            eligibleStudents.push({
+              student: student._id,
+              eligible: true,
+              reason: eligibilityResult.reason,
+              certificateGenerated: true,
+              alreadyIssued: true,
+              certificateId: existingCertificate._id,
+            });
+            continue;
+          }
+
           // Generate certificate
           const instructor = await User.findById(course.instructor);
           const certificateId = 'CERT-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9).toUpperCase();
@@ -202,32 +278,45 @@ exports.markCourseComplete = async (req, res) => {
 };
 
 // Helper function to check if student is eligible for certificate
-const checkStudentEligibility = async (student, course, isMarkingComplete = false) => {
+const checkStudentEligibility = async (student, course) => {
   try {
     // Check if student is enrolled
-    if (!course.enrolledStudents.some(s => s._id.toString() === student._id.toString())) {
+    if (!course.enrolledStudents.some(enrolledStudent => (enrolledStudent._id || enrolledStudent).toString() === student._id.toString())) {
       return {
         eligible: false,
         reason: 'Student is not enrolled in this course'
       };
     }
 
-    // Skip course completion check if we're in the process of marking it complete
-    if (!isMarkingComplete && !course.isCompletedByInstructor) {
+    const courseProgress = student.progress?.get(course._id.toString());
+    const completedModules = new Set((courseProgress?.completedModules || []).map(moduleId => moduleId.toString()));
+    const missingModules = (course.modules || []).filter(module => !completedModules.has(module._id.toString()));
+    if (missingModules.length > 0) {
       return {
         eligible: false,
-        reason: 'Course has not been marked as complete by instructor'
+        reason: `Student has completed ${completedModules.size} out of ${course.modules.length} course modules`
       };
     }
 
-    // Get all assignments and quizzes for the course
-    const assignments = await Assignment.find({
-      course: course._id
-    });
-    
-    const quizzes = await Quiz.find({
-      course: course._id
-    });
+    const completedLessons = new Set((courseProgress?.completedLessons || []).map(lessonId => lessonId.toString()));
+    const requiredLessons = (course.modules || []).flatMap(module => module.lessons || []);
+    const missingLessons = requiredLessons.filter(lesson => !completedLessons.has(lesson._id.toString()));
+    if (missingLessons.length > 0) {
+      return {
+        eligible: false,
+        reason: `Student has completed ${requiredLessons.length - missingLessons.length} out of ${requiredLessons.length} lessons`
+      };
+    }
+
+    // Match the required work shown in course modules; unlinked records are not part of learner progress.
+    const assignmentIds = (course.modules || []).flatMap(module => module.assignments || [])
+      .map(assignment => (assignment._id || assignment).toString());
+    const quizIds = (course.modules || []).flatMap(module => module.quizzes || [])
+      .map(quiz => (quiz._id || quiz).toString());
+    const [assignments, quizzes] = await Promise.all([
+      assignmentIds.length ? Assignment.find({ _id: { $in: assignmentIds }, course: course._id }) : [],
+      quizIds.length ? Quiz.find({ _id: { $in: quizIds }, course: course._id }) : [],
+    ]);
 
     let totalAssignments = assignments.length;
     let completedAssignments = 0;
@@ -239,12 +328,11 @@ const checkStudentEligibility = async (student, course, isMarkingComplete = fals
 
     // Check assignment completion and grades
     for (const assignment of assignments) {
-      const submission = assignment.submissions.find(sub => 
-        sub.student.toString() === student._id.toString() && 
-        sub.status === 'graded' && 
-        sub.grade !== null && 
-        sub.grade >= (course.passingThreshold || 40)
-      );
+      const passingGrade = assignment.passingGrade ?? course.passingThreshold ?? 40;
+      const bestSubmission = assignment.submissions
+        .filter(sub => sub.student.toString() === student._id.toString() && sub.status === 'graded' && sub.grade !== null && sub.grade !== undefined)
+        .reduce((best, submission) => !best || submission.grade > best.grade ? submission : best, null);
+      const submission = bestSubmission && bestSubmission.grade >= passingGrade ? bestSubmission : null;
       
       if (submission) {
         completedAssignments++;
@@ -254,13 +342,12 @@ const checkStudentEligibility = async (student, course, isMarkingComplete = fals
 
     // Check quiz completion and scores
     for (const quiz of quizzes) {
-      const attempt = quiz.attempts.find(att => 
-        att.student.toString() === student._id.toString()
-      );
-      
-      if (attempt && attempt.score >= (course.passingThreshold || 40)) {
+      const attempts = quiz.attempts.filter(att => att.student.toString() === student._id.toString());
+      const bestAttempt = attempts.reduce((best, attempt) => !best || attempt.score > best.score ? attempt : best, null);
+
+      if (bestAttempt && bestAttempt.score >= (quiz.passingScore ?? course.passingThreshold ?? 40)) {
         completedQuizzes++;
-        quizScores.push(attempt.score);
+        quizScores.push(bestAttempt.score);
       }
     }
 

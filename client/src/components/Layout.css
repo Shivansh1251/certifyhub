@@ -58,3 +58,32 @@
     padding: 2rem 0.75rem 2.5rem;
   }
 }
+
+.app-shell {
+  overflow: visible;
+}
+
+.app-shell__gradient {
+  background:
+    radial-gradient(circle at 12% 8%, rgba(40, 103, 201, 0.08), transparent 32%),
+    radial-gradient(circle at 88% 24%, rgba(84, 143, 240, 0.045), transparent 36%);
+  opacity: 1;
+}
+
+.app-shell__pattern {
+  opacity: 0.18;
+}
+
+.app-main {
+  padding: clamp(2rem, 4vw, 3.5rem) 1.25rem 4rem;
+}
+
+.app-container {
+  padding-inline: 0;
+}
+
+@media (max-width: 640px) {
+  .app-main {
+    padding: 1.5rem 0.85rem 2.5rem;
+  }
+}

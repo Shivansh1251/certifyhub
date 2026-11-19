@@ -1,7 +1,6 @@
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
 const { isStrongPassword } = require("../utils/passwordValidator");
-const { sendOTPEmail } = require("../utils/emailService");
 
 // Generate JWT Token
 const generateToken = (id) => {
@@ -62,12 +61,7 @@ exports.registerUser = async (req, res) => {
   }
 };
 
-// Generate 6-digit OTP
-const generateOTP = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-};
-
-// @desc    Login user - Step 1: Verify credentials and send OTP
+// @desc    Login user with email and password
 // @route   POST /api/auth/login
 // @access  Public
 exports.loginUser = async (req, res) => {
@@ -80,32 +74,15 @@ exports.loginUser = async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    // Generate OTP
-    const otp = generateOTP();
-    const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-    // Save OTP to user
-    user.otp = otp;
-    user.otpExpires = otpExpires;
-    await user.save();
-
-    // Send OTP email
-    try {
-      await sendOTPEmail(user.email, otp, user.name);
-      res.json({
-        message: "OTP sent to your email",
-        email: user.email,
-        requiresOTP: true,
-      });
-    } catch (emailError) {
-      // Clear OTP if email fails
-      user.otp = null;
-      user.otpExpires = null;
-      await user.save();
-      return res.status(500).json({ 
-        message: "Failed to send OTP email. Please try again later." 
-      });
-    }
+    // Mail OTP login is temporarily disabled; use the normal password login flow.
+    res.json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      token: generateToken(user._id),
+      message: "Login successful",
+    });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

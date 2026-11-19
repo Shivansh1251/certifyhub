@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import useAuth from '../hooks/useAuth';
 import apiRequest from '../utils/api';
 import './Checkout.css';
@@ -12,6 +12,7 @@ const Checkout = () => {
   const [isPaying, setIsPaying] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
 
@@ -105,7 +106,7 @@ const Checkout = () => {
               },
               true
             );
-            navigate('/payment-success');
+            navigate(`/payment-success?courseId=${courseId}`);
           } catch (err) {
             console.error('Verification failed', err);
             setPaymentError(err.message || 'Payment verification failed. Please contact support.');
@@ -140,7 +141,7 @@ const Checkout = () => {
 
     if (!user) {
       setPaymentError('Please log in to continue with the payment.');
-      navigate('/login', { replace: true });
+      navigate('/login', { replace: true, state: { from: `${location.pathname}${location.search}` } });
       return;
     }
 
@@ -175,7 +176,7 @@ const Checkout = () => {
   const handleFreeEnroll = async () => {
     if (!user) {
       setPaymentError('Please log in to enroll in this course.');
-      navigate('/login', { replace: true });
+      navigate('/login', { replace: true, state: { from: `${location.pathname}${location.search}` } });
       return;
     }
 
@@ -183,7 +184,7 @@ const Checkout = () => {
     setIsPaying(true);
     try {
       await apiRequest(`/courses/${courseId}/enroll`, 'POST', null, true);
-      navigate('/profile');
+      navigate(`/courses/${courseId}/content`);
     } catch (err) {
       console.error('Free enrollment failed', err);
       setPaymentError(err.message || 'Unable to enroll right now. Please try again.');

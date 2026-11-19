@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import apiRequest from '../utils/api';
-import useAuth from '../hooks/useAuth';
+import apiRequest, { serverUrl } from '../utils/api';
 import './InstructorDashboard.css';
 
 const InstructorDashboard = () => {
-  const { user } = useAuth();
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -15,11 +13,13 @@ const InstructorDashboard = () => {
   }, []);
 
   const fetchDashboardData = async () => {
+    setLoading(true);
+    setError('');
     try {
       const data = await apiRequest('/users/dashboard/instructor', 'GET', null, true);
       setDashboardData(data);
     } catch (err) {
-      setError('Failed to load dashboard data');
+      setError(err.message || 'Failed to load dashboard data');
       console.error('Dashboard error:', err);
     } finally {
       setLoading(false);
@@ -77,7 +77,12 @@ const InstructorDashboard = () => {
   }
 
   if (error) {
-    return <div className="error-message">{error}</div>;
+    return (
+      <div className="error-message" role="alert">
+        <p>{error}</p>
+        <button type="button" className="btn btn-secondary" onClick={fetchDashboardData}>Try again</button>
+      </div>
+    );
   }
 
   if (!dashboardData) {
@@ -142,11 +147,11 @@ const InstructorDashboard = () => {
                 <Link to="/create-course" className="btn-primary">Create Course</Link>
               </div>
             ) : (
-              <div className="courses-grid">
+              <div className="courses-grid" id="instructor-courses">
                 {dashboardData.createdCourses.map(course => (
                   <div key={course._id} className="course-card instructor-course">
                     <div className="course-header">
-                      <h3>{course.title}</h3>
+                      <h3><Link to={`/courses/${course._id}`}>{course.title}</Link></h3>
                       <div className="course-meta">
                         <span className="price">{course.price === 0 ? 'Free' : formatCurrency(course.price)}</span>
                         <span className="rating">
@@ -178,6 +183,23 @@ const InstructorDashboard = () => {
                       <div className="revenue-info">
                         <span>Revenue: {formatCurrency(course.price * course.analytics.totalStudents)}</span>
                       </div>
+                      <div className="enrolled-students">
+                        <strong>Enrolled students</strong>
+                        {course.enrolledStudents?.length ? (
+                          <ul>
+                            {course.enrolledStudents.slice(0, 5).map((student) => (
+                              <li key={student._id}>
+                                {student.name} <span>{student.email}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p>No students enrolled yet.</p>
+                        )}
+                        {course.enrolledStudents?.length > 5 && (
+                          <small>+{course.enrolledStudents.length - 5} more students</small>
+                        )}
+                      </div>
                     </div>
                     
                     <div className="course-actions">
@@ -187,8 +209,8 @@ const InstructorDashboard = () => {
                       <Link to={`/courses/${course._id}/edit`} className="btn-secondary btn-small">
                         Edit
                       </Link>
-                      <Link to={`/instructor/analytics/${course._id}`} className="btn-primary btn-small">
-                        Analytics
+                      <Link to={`/courses/${course._id}/edit`} className="btn-primary btn-small">
+                        Edit lessons
                       </Link>
                       {!course.isCompletedByInstructor && (
                         <button 
@@ -207,7 +229,7 @@ const InstructorDashboard = () => {
           </section>
 
           {/* Recent Activity Section */}
-          <section className="dashboard-section">
+          <section className="dashboard-section" id="instructor-activity">
             <div className="section-header">
               <h2>Recent Activity</h2>
             </div>
@@ -289,7 +311,7 @@ const InstructorDashboard = () => {
                 </div>
               </Link>
               
-              <Link to="/instructor/students" className="action-item">
+              <Link to="#instructor-courses" className="action-item">
                 <div className="action-icon">👥</div>
                 <div className="action-text">
                   <h4>Manage Students</h4>
@@ -297,7 +319,7 @@ const InstructorDashboard = () => {
                 </div>
               </Link>
               
-              <Link to="/instructor/analytics" className="action-item">
+              <Link to="#instructor-activity" className="action-item">
                 <div className="action-icon">📊</div>
                 <div className="action-text">
                   <h4>Analytics</h4>
@@ -313,7 +335,7 @@ const InstructorDashboard = () => {
             <div className="profile-summary">
               {dashboardData.user.profilePicture && (
                 <img 
-                  src={`http://localhost:5000${dashboardData.user.profilePicture}`}
+                  src={serverUrl(dashboardData.user.profilePicture)}
                   alt="Profile"
                   className="profile-image"
                 />

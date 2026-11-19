@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import useAuth from '../hooks/useAuth';
-import apiRequest from '../utils/api';
+import apiRequest, { API_BASE } from '../utils/api';
 import Certificate from '../components/Certificate';
 import './Certificates.css';
 
@@ -50,7 +50,7 @@ const Certificates = () => {
 
       // Use the direct download endpoint
       const response = await fetch(
-        `http://localhost:5000/api/certificates/download/${courseId}?userId=${studentId}`,
+        `${API_BASE}/certificates/download/${courseId}?userId=${studentId}`,
         {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`

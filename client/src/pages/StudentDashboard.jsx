@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import apiRequest from '../utils/api';
-import useAuth from '../hooks/useAuth';
+import apiRequest, { serverUrl } from '../utils/api';
 import './StudentDashboard.css';
 
 const StudentDashboard = () => {
-  const { user } = useAuth();
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -15,11 +13,13 @@ const StudentDashboard = () => {
   }, []);
 
   const fetchDashboardData = async () => {
+    setLoading(true);
+    setError('');
     try {
       const data = await apiRequest('/users/dashboard/student', 'GET', null, true);
       setDashboardData(data);
     } catch (err) {
-      setError('Failed to load dashboard data');
+      setError(err.message || 'Failed to load dashboard data');
       console.error('Dashboard error:', err);
     } finally {
       setLoading(false);
@@ -43,36 +43,51 @@ const StudentDashboard = () => {
   }
 
   if (error) {
-    return <div className="error-message">{error}</div>;
+    return (
+      <div className="error-message" role="alert">
+        <p>{error}</p>
+        <button type="button" className="btn btn-secondary" onClick={fetchDashboardData}>Try again</button>
+      </div>
+    );
   }
 
   if (!dashboardData) {
-    return <div className="error-message">No dashboard data available</div>;
+    return (
+      <div className="error-message" role="alert">
+        <p>No dashboard data available.</p>
+        <button type="button" className="btn btn-secondary" onClick={fetchDashboardData}>Try again</button>
+      </div>
+    );
   }
+
+  const enrolledCourses = Array.isArray(dashboardData.enrolledCourses) ? dashboardData.enrolledCourses : [];
+  const recentAssignments = Array.isArray(dashboardData.recentAssignments) ? dashboardData.recentAssignments : [];
+  const recentQuizzes = Array.isArray(dashboardData.recentQuizzes) ? dashboardData.recentQuizzes : [];
+  const stats = dashboardData.stats || {};
 
   return (
     <div className="student-dashboard">
       <div className="dashboard-header">
         <div className="welcome-section">
-          <h1>Welcome back, {dashboardData.user.name}!</h1>
+            <h1>Welcome back, {dashboardData.user?.name || 'Learner'}!</h1>
           <p className="welcome-subtitle">Continue your learning journey</p>
         </div>
         <div className="quick-stats">
           <div className="stat-card">
-            <div className="stat-number">{dashboardData.stats.totalCourses}</div>
+            <div className="stat-number">{stats.totalCourses ?? enrolledCourses.length}</div>
             <div className="stat-label">Enrolled Courses</div>
           </div>
           <div className="stat-card">
-            <div className="stat-number">{dashboardData.stats.completedCourses}</div>
+            <div className="stat-number">{stats.completedCourses ?? 0}</div>
             <div className="stat-label">Completed</div>
           </div>
           <div className="stat-card">
-            <div className="stat-number">{dashboardData.stats.inProgressCourses}</div>
+            <div className="stat-number">{stats.inProgressCourses ?? 0}</div>
             <div className="stat-label">In Progress</div>
           </div>
           <div className="stat-card">
-            <Link to="/certificates" style={{ textDecoration: 'none', color: 'inherit' }}>
-              <div className="stat-number">{dashboardData.certificates}</div>
+            <Link to="/certificates" className="dashboard-stat-link" aria-label={`${dashboardData.certificates || 0} certificates, view certificates`}>
+              <div className="stat-number">{dashboardData.certificates || 0}</div>
               <div className="stat-label">Certificates</div>
             </Link>
           </div>
@@ -88,7 +103,7 @@ const StudentDashboard = () => {
               <Link to="/courses" className="btn-secondary">Browse More</Link>
             </div>
             
-            {dashboardData.enrolledCourses.length === 0 ? (
+            {enrolledCourses.length === 0 ? (
               <div className="empty-state">
                 <h3>No courses enrolled yet</h3>
                 <p>Start your learning journey by enrolling in a course</p>
@@ -96,28 +111,29 @@ const StudentDashboard = () => {
               </div>
             ) : (
               <div className="courses-grid">
-                {dashboardData.enrolledCourses.map(course => (
-                  <div key={course._id} className="course-card">
+                {enrolledCourses.map(course => {
+                  const percentage = Math.max(0, Math.min(100, Number(course.progress?.percentage) || 0));
+                  return <article key={course._id} className="course-card">
                     <div className="course-header">
-                      <h3>{course.title}</h3>
-                      <span className="instructor-name">by {course.instructor.name}</span>
+                      <h3><Link to={`/courses/${course._id}/content`}>{course.title}</Link></h3>
+                      <span className="instructor-name">by {course.instructor?.name || 'CertifyHub instructor'}</span>
                     </div>
                     
                     <div className="progress-section">
                       <div className="progress-info">
                         <span className="progress-text">
-                          Progress: {course.progress.percentage}%
+                          Progress: {percentage}%
                         </span>
                         <span className="modules-text">
-                          {course.progress.completedModules}/{course.progress.totalModules} modules
+                          {course.progress?.completedModules || 0}/{course.progress?.totalModules || 0} modules
                         </span>
                       </div>
                       <div className="progress-bar">
                         <div 
                           className="progress-fill" 
                           style={{ 
-                            width: `${course.progress.percentage}%`,
-                            backgroundColor: getProgressColor(course.progress.percentage)
+                            width: `${percentage}%`,
+                            backgroundColor: getProgressColor(percentage)
                           }}
                         ></div>
                       </div>
@@ -125,12 +141,12 @@ const StudentDashboard = () => {
                     
                     <div className="course-stats">
                       <div className="stat">
-                        <span className="stat-value">{course.progress.assignmentSubmissions}</span>
-                        <span className="stat-label">/{course.progress.totalAssignments} Assignments</span>
+                        <span className="stat-value">{course.progress?.assignmentSubmissions || 0}</span>
+                        <span className="stat-label">/{course.progress?.totalAssignments || 0} Assignments</span>
                       </div>
                       <div className="stat">
-                        <span className="stat-value">{course.progress.quizAttempts}</span>
-                        <span className="stat-label">/{course.progress.totalQuizzes} Quizzes</span>
+                        <span className="stat-value">{course.progress?.quizAttempts || 0}</span>
+                        <span className="stat-label">/{course.progress?.totalQuizzes || 0} Quizzes</span>
                       </div>
                     </div>
                     
@@ -148,8 +164,8 @@ const StudentDashboard = () => {
                         Course Details
                       </Link>
                     </div>
-                  </div>
-                ))}
+                  </article>;
+                })}
               </div>
             )}
           </section>
@@ -160,24 +176,24 @@ const StudentDashboard = () => {
               <h2>Upcoming Assignments</h2>
             </div>
             
-            {dashboardData.recentAssignments.length === 0 ? (
+            {recentAssignments.length === 0 ? (
               <div className="empty-state-small">
                 <p>No upcoming assignments</p>
               </div>
             ) : (
               <div className="assignments-list">
-                {dashboardData.recentAssignments.map(assignment => (
+                {recentAssignments.map(assignment => (
                   <div key={assignment._id} className="assignment-item">
                     <div className="assignment-info">
                       <h4>{assignment.title}</h4>
-                      <p className="course-name">{assignment.course.title}</p>
+                      <p className="course-name">{assignment.course?.title || 'Course'}</p>
                       <p className="due-date">
                         Due: {new Date(assignment.dueDate).toLocaleDateString()}
                       </p>
                     </div>
                     <div className="assignment-actions">
                       <Link 
-                        to={`/courses/${assignment.course._id}/content`}
+                        to={`/courses/${assignment.course?._id}/content`}
                         className="btn-primary btn-small"
                       >
                         Submit
@@ -194,16 +210,16 @@ const StudentDashboard = () => {
           {/* Recent Quizzes */}
           <section className="sidebar-section">
             <h3>Recent Quizzes</h3>
-            {dashboardData.recentQuizzes.length === 0 ? (
+            {recentQuizzes.length === 0 ? (
               <p>No recent quizzes</p>
             ) : (
               <div className="quiz-list">
-                {dashboardData.recentQuizzes.slice(0, 5).map(quiz => (
+                {recentQuizzes.slice(0, 5).map(quiz => (
                   <div key={quiz._id} className="quiz-item">
                     <h4>{quiz.title}</h4>
-                    <p className="course-name">{quiz.course.title}</p>
+                    <p className="course-name">{quiz.course?.title || 'Course'}</p>
                     <Link 
-                      to={`/courses/${quiz.course._id}/content`}
+                      to={`/courses/${quiz.course?._id}/content`}
                       className="btn-secondary btn-small"
                     >
                       Take Quiz
@@ -218,24 +234,24 @@ const StudentDashboard = () => {
           <section className="sidebar-section">
             <h3>Profile</h3>
             <div className="profile-summary">
-              {dashboardData.user.profilePicture && (
+              {dashboardData.user?.profilePicture && (
                 <img 
-                  src={`http://localhost:5000${dashboardData.user.profilePicture}`}
+                  src={serverUrl(dashboardData.user.profilePicture)}
                   alt="Profile"
                   className="profile-image"
                 />
               )}
               <div className="profile-info">
-                <h4>{dashboardData.user.name}</h4>
-                <p>{dashboardData.user.email}</p>
-                {dashboardData.user.bio && <p className="bio">{dashboardData.user.bio}</p>}
+                <h4>{dashboardData.user?.name || 'Learner'}</h4>
+                <p>{dashboardData.user?.email}</p>
+                {dashboardData.user?.bio && <p className="bio">{dashboardData.user.bio}</p>}
               </div>
               <Link to="/profile" className="btn-secondary">Edit Profile</Link>
             </div>
           </section>
 
           {/* Skills */}
-          {dashboardData.user.skills && dashboardData.user.skills.length > 0 && (
+          {dashboardData.user?.skills && dashboardData.user.skills.length > 0 && (
             <section className="sidebar-section">
               <h3>Skills</h3>
               <div className="skills-tags">

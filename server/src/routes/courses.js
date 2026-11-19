@@ -3,9 +3,11 @@ const {
   createCourse,
   getCourses,
   getCourseById,
+  updateCourse,
   enrollCourse,
   addReview,
   getCourseContent,
+  saveLessonNote,
   completeModule,
   addModule,
   deleteModule,
@@ -13,6 +15,7 @@ const {
   getCourseProgress,
   incompleteModule,
   addLesson,
+  updateLesson,
   deleteLesson,
   uploadLessonFile,
   rateCourse,
@@ -30,15 +33,19 @@ const {
 const {
   generateCertificate,
 } = require("../controllers/certificateController");
-const { protect } = require("../middleware/auth");
-const { upload, uploadFields } = require("../utils/upload");
+const { protect, authorize } = require("../middleware/auth");
+const { upload, uploadFields, createUploadMiddleware } = require("../utils/upload");
+const lessonUpload = createUploadMiddleware({
+  maxFileSize: 250 * 1024 * 1024,
+  allowedFileTypes: ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'mp4', 'm4v', 'webm', 'mov', 'csv', 'xls', 'xlsx', 'json', 'zip', 'txt', 'ipynb', 'jpg', 'jpeg', 'png', 'webp'],
+});
 
 const router = express.Router();
 
 // @route   POST /api/courses
 // @desc    Create new course (Instructor only)
 // @access  Private
-router.post("/", protect, createCourse);
+router.post("/", protect, authorize("instructor", "admin"), createCourse);
 
 // @route   GET /api/courses
 // @desc    Get all courses (with filters & search)
@@ -50,10 +57,15 @@ router.get("/", getCourses);
 // @access  Public
 router.get("/:id", getCourseById);
 
+// @route   PUT /api/courses/:id
+// @desc    Update course overview and learning expectations
+// @access  Private (Course instructor or admin)
+router.put("/:id", protect, authorize("instructor", "admin"), updateCourse);
+
 // @route   POST /api/courses/:id/enroll
 // @desc    Enroll in a course
 // @access  Private
-router.post("/:id/enroll", protect, enrollCourse);
+router.post("/:id/enroll", protect, authorize("student"), enrollCourse);
 
 // @route   POST /api/courses/:id/reviews
 // @desc    Add a review to a course
@@ -64,6 +76,11 @@ router.post("/:id/reviews", protect, addReview);
 // @desc    Get course content and user progress
 // @access  Private (enrolled students)
 router.get("/:id/content", protect, getCourseContent);
+
+// @route   PUT /api/courses/:id/lessons/:lessonId/notes
+// @desc    Save a learner's private lesson notes
+// @access  Private (enrolled students and course instructor)
+router.put("/:id/lessons/:lessonId/notes", protect, saveLessonNote);
 
 // @route   POST /api/courses/:id/modules/:moduleId/complete
 // @desc    Mark module as completed for user
@@ -105,6 +122,11 @@ router.get("/:id/progress", protect, getCourseProgress);
 // @access  Private
 router.post("/:id/modules/:moduleId/lessons", protect, addLesson);
 
+// @route   PUT /api/courses/:id/modules/:moduleId/lessons/:lessonId
+// @desc    Update a lesson chapter and its self-checks (Instructor only)
+// @access  Private
+router.put("/:id/modules/:moduleId/lessons/:lessonId", protect, updateLesson);
+
 // @route   DELETE /api/courses/:id/modules/:moduleId/lessons/:lessonId
 // @desc    Delete a lesson from a module (Instructor only)
 // @access  Private
@@ -116,7 +138,7 @@ router.delete("/:id/modules/:moduleId/lessons/:lessonId", protect, deleteLesson)
 router.post(
   "/:id/modules/:moduleId/lessons/:lessonId/upload",
   protect,
-  upload.single("file"),
+  lessonUpload.single("file"),
   uploadLessonFile
 );
 

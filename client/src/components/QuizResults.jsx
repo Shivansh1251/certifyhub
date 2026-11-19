@@ -15,7 +15,10 @@ const QuizResults = ({ results, quizTitle, onClose, onRetakeQuiz }) => {
     submittedAt,
     isAutoSubmit,
     timeTaken,
-    status
+    status,
+    isPassed,
+    attemptsRemaining,
+    passingScore,
   } = results;
 
   const getScoreClass = () => {
@@ -66,6 +69,9 @@ const QuizResults = ({ results, quizTitle, onClose, onRetakeQuiz }) => {
         </div>
         
         <div className="score-details">
+          <div className={`score-outcome ${isPassed ? 'passed' : 'needs-review'}`}>
+            {isPassed ? 'Passed' : 'Not passed yet'}{Number.isFinite(Number(passingScore)) ? ` · ${passingScore}% required` : ''}
+          </div>
           <div className="score-stat">
             <span className="stat-label">Questions Correct:</span>
             <span className="stat-value">{questionsCorrect} / {totalQuestions}</span>
@@ -78,6 +84,12 @@ const QuizResults = ({ results, quizTitle, onClose, onRetakeQuiz }) => {
             <div className="score-stat">
               <span className="stat-label">Time Taken:</span>
               <span className="stat-value">{formatTime(timeTaken)}</span>
+            </div>
+          )}
+          {attemptsRemaining !== undefined && (
+            <div className="score-stat">
+              <span className="stat-label">Attempts remaining:</span>
+              <span className="stat-value">{attemptsRemaining}</span>
             </div>
           )}
         </div>
@@ -122,18 +134,19 @@ const QuizResults = ({ results, quizTitle, onClose, onRetakeQuiz }) => {
                   <div className="answer-row">
                     <span className="answer-label">Your Answer:</span>
                     <span className={`answer-value ${result.isCorrect ? 'correct' : 'incorrect'}`}>
-                      {result.selectedAnswer}
+                      {result.selectedAnswerText || result.selectedAnswer || 'No answer'}
                     </span>
                   </div>
                   {!result.isCorrect && (
                     <div className="answer-row">
                       <span className="answer-label">Correct Answer:</span>
                       <span className="answer-value correct">
-                        {result.correctAnswer}
+                        {result.correctAnswerText || result.correctAnswer}
                       </span>
                     </div>
                   )}
                 </div>
+                {result.explanation && <p className="answer-explanation"><strong>Why:</strong> {result.explanation}</p>}
               </div>
             ))}
           </div>
@@ -141,22 +154,16 @@ const QuizResults = ({ results, quizTitle, onClose, onRetakeQuiz }) => {
       )}
 
       <div className="results-actions">
+        {attemptsRemaining > 0 && onRetakeQuiz && <button onClick={onRetakeQuiz} className="btn-secondary">Try again ({attemptsRemaining} left)</button>}
         <button onClick={onClose} className="btn-primary">
           Continue Learning
         </button>
-        {/* Note: Retake functionality would need to be implemented based on course rules */}
-        {/* 
-        <button onClick={onRetakeQuiz} className="btn-secondary">
-          Retake Quiz
-        </button> 
-        */}
       </div>
 
-      {status === 'submitted' && (
+      {status === 'submitted' && attemptsRemaining === 0 && (
         <div className="submission-notice">
           <p>
-            <strong>Note:</strong> This quiz has been submitted successfully. 
-            Only one submission is allowed per quiz.
+            <strong>Note:</strong> This attempt is saved. You have used all attempts for this quiz.
           </p>
         </div>
       )}

@@ -554,3 +554,275 @@ tr:last-child td {
     padding: 0.75rem 0.5rem;
   }
 }
+
+/* Admin dashboard refresh: clearer hierarchy, responsive tables, and live panels. */
+.admin-dashboard {
+  max-width: none;
+  padding: 0;
+  background: transparent;
+}
+
+.admin-dashboard .dashboard-header {
+  padding: clamp(1.5rem, 3.5vw, 2.5rem);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--border-radius-lg);
+  background: linear-gradient(125deg, #1b2c45, #31567d 70%, #4578a8);
+  box-shadow: var(--surface-shadow-md);
+}
+
+.admin-dashboard .welcome-section h1 {
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  letter-spacing: -0.04em;
+}
+
+.admin-dashboard .welcome-subtitle {
+  font-size: 1rem;
+}
+
+.admin-dashboard .dashboard-tabs {
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  margin: 1.25rem 0;
+  padding: 0.45rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  background: var(--background-primary);
+  box-shadow: var(--surface-shadow-xs);
+}
+
+.admin-dashboard .dashboard-tabs .tab {
+  flex: 0 0 auto;
+  padding: 0.75rem 1rem;
+  border-radius: var(--border-radius-sm);
+  color: var(--text-secondary);
+  background: transparent;
+  font: 600 0.9rem var(--font-body);
+}
+
+.admin-dashboard .dashboard-tabs .tab:hover {
+  color: var(--primary-700);
+  background: var(--background-strong);
+}
+
+.admin-dashboard .dashboard-tabs .tab.active {
+  color: #fff;
+  background: var(--primary-700);
+}
+
+.admin-dashboard .dashboard-content {
+  padding: clamp(1rem, 2.5vw, 1.75rem);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  background: var(--background-primary);
+  box-shadow: var(--surface-shadow-xs);
+}
+
+.admin-dashboard .stats-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 0.9rem;
+}
+
+.admin-dashboard .stat-card {
+  min-width: 0;
+  padding: 1.25rem;
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--primary-500);
+  border-radius: var(--border-radius-md);
+  background: var(--background-strong);
+  box-shadow: none;
+}
+
+.admin-dashboard .stat-number {
+  font-size: clamp(1.7rem, 2.4vw, 2.2rem);
+  overflow-wrap: anywhere;
+}
+
+.admin-dashboard .section-header h2 {
+  font-size: clamp(1.25rem, 2vw, 1.6rem);
+  letter-spacing: -0.025em;
+}
+
+.admin-dashboard .btn-primary,
+.admin-dashboard .btn-secondary,
+.admin-dashboard .btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--border-radius-sm);
+  font-size: 0.88rem;
+  text-decoration: none;
+}
+
+.admin-dashboard .recent-item,
+.admin-dashboard .filters-section,
+.admin-dashboard .report-course-performance {
+  background: var(--background-strong);
+  border-color: var(--border-color);
+}
+
+.admin-dashboard .item-info h4 a,
+.admin-dashboard .courses-table td a:not(.btn),
+.admin-dashboard .report-course-label a {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.admin-dashboard .item-info h4 a:hover,
+.admin-dashboard .courses-table td a:not(.btn):hover,
+.admin-dashboard .report-course-label a:hover {
+  color: var(--primary-700);
+  text-decoration: underline;
+}
+
+.admin-dashboard .admin-panel-heading {
+  align-items: center;
+}
+
+.admin-dashboard .admin-panel-heading p {
+  margin: 0.35rem 0 0;
+  color: var(--text-secondary);
+}
+
+.admin-dashboard .admin-courses-table,
+.admin-dashboard .users-table,
+.admin-dashboard .courses-table {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+}
+
+.admin-dashboard table {
+  min-width: 700px;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-dashboard th {
+  background: var(--background-strong);
+  color: var(--text-secondary);
+}
+
+.admin-dashboard th,
+.admin-dashboard td {
+  border-color: var(--border-color);
+}
+
+.admin-dashboard tr:hover {
+  background: color-mix(in srgb, var(--primary-100) 52%, var(--background-primary));
+}
+
+.admin-dashboard .admin-course-title {
+  font-weight: 700;
+}
+
+.admin-dashboard .admin-table-state,
+.admin-dashboard .admin-empty-cell {
+  padding: 1.25rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.admin-dashboard .admin-inline-error {
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(220, 58, 58, 0.25);
+  border-radius: var(--border-radius-sm);
+  color: var(--error-color);
+  background: rgba(220, 58, 58, 0.07);
+}
+
+.admin-dashboard .report-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 0.8rem;
+  margin-bottom: 1.4rem;
+}
+
+.admin-dashboard .report-summary-grid article {
+  display: grid;
+  gap: 0.25rem;
+  padding: 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  background: var(--background-strong);
+}
+
+.admin-dashboard .report-summary-grid span {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.admin-dashboard .report-summary-grid strong {
+  color: var(--text-primary);
+  font-size: 1.65rem;
+}
+
+.admin-dashboard .report-course-performance {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+}
+
+.admin-dashboard .report-course-performance h3 {
+  font-size: 1.1rem;
+}
+
+.admin-dashboard .report-course-row {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.admin-dashboard .report-course-label {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+}
+
+.admin-dashboard .report-course-label span {
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+}
+
+.admin-dashboard .report-course-track {
+  height: 9px;
+  overflow: hidden;
+  border-radius: var(--border-radius-pill);
+  background: var(--neutral-150);
+}
+
+.admin-dashboard .report-course-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--primary-600), var(--primary-400));
+}
+
+.admin-dashboard .search-form {
+  flex-wrap: wrap;
+}
+
+.admin-dashboard .pagination {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .admin-dashboard .dashboard-header {
+    padding: 1.25rem;
+  }
+
+  .admin-dashboard .dashboard-tabs .tab {
+    padding-inline: 0.8rem;
+  }
+
+  .admin-dashboard .section-header {
+    align-items: flex-start;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+}

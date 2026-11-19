@@ -25,6 +25,183 @@
   color: var(--text-primary);
 }
 
+.course-learning-list {
+  max-width: 820px;
+  margin: 1.25rem 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  background: var(--background-secondary);
+}
+
+.course-learning-list h3 {
+  margin: 0 0 0.5rem;
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.course-learning-list ul {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--text-secondary);
+}
+
+.course-syllabus {
+  max-width: 1050px;
+  margin: 2rem auto;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  background: var(--background-primary);
+  box-shadow: var(--surface-shadow-xs);
+}
+
+.course-syllabus__header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.course-syllabus__header h2 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.course-syllabus__header > span {
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--background-secondary);
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+
+.syllabus-modules {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.syllabus-module {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  background: var(--background-primary);
+}
+
+.syllabus-module__heading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.syllabus-module__heading > span {
+  color: var(--primary-color);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.syllabus-module__heading h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.05rem;
+}
+
+.syllabus-lessons {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.syllabus-lessons li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  color: var(--text-secondary);
+}
+
+.syllabus-lesson__icon {
+  display: grid;
+  width: 1.3rem;
+  height: 1.3rem;
+  flex: 0 0 1.3rem;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--primary-color);
+  background: var(--background-secondary);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.syllabus-lessons li > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.syllabus-lessons strong {
+  color: var(--text-primary);
+  font-size: 0.92rem;
+}
+
+.syllabus-lessons p {
+  margin: 0.2rem 0 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.syllabus-lessons small {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.syllabus-assessments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.syllabus-assessments span {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--background-secondary);
+  font-size: 0.78rem;
+}
+
+.syllabus-empty {
+  margin: 0;
+  padding: 1rem;
+  border-radius: var(--border-radius-sm);
+  color: var(--text-secondary);
+  background: var(--background-secondary);
+}
+
+@media (max-width: 560px) {
+  .course-syllabus__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .syllabus-module__heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+}
+
 .course-actions {
   display: flex;
   gap: 1rem;
@@ -292,4 +469,99 @@
   .certificate-requirements h4 {
     font-size: 1.25rem;
   }
+}
+
+.course-container {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: clamp(1.15rem, 3vw, 2.25rem);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  background: var(--background-primary);
+  box-shadow: var(--surface-shadow-sm);
+}
+
+.course-container .course-details h2 {
+  font-size: clamp(1.7rem, 3vw, 2.25rem);
+  letter-spacing: -0.04em;
+}
+
+.course-container .course-actions {
+  align-items: center;
+}
+
+.course-container .course-actions a,
+.course-container .course-actions button,
+.course-container .go-to-course-btn,
+.course-container .edit-course-btn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--border-radius-sm);
+  text-decoration: none;
+}
+
+.course-container #reviewsList > div {
+  border-color: var(--border-color);
+  background: var(--background-strong);
+  box-shadow: none;
+}
+
+.course-container #reviewRating,
+.course-container #reviewComment {
+  border-color: var(--border-color);
+  color: var(--text-primary);
+  background: var(--background-primary);
+}
+
+.course-container .certificate-section,
+.course-container .certificate-requirements {
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--surface-shadow-xs);
+}
+
+.course-container .certificate-badge h3 {
+  color: #087443;
+}
+
+.course-container .certificate-requirements {
+  background: color-mix(in srgb, var(--primary-100) 70%, var(--background-primary));
+  border-color: var(--primary-200);
+}
+
+.course-container .certificate-requirements h4,
+.course-container .certificate-requirements p {
+  color: var(--primary-800);
+}
+
+.course-container .certificate-requirements li {
+  background: var(--background-primary);
+  border-color: var(--primary-500);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+.course-container .certificate-requirements li:hover {
+  transform: none;
+  box-shadow: var(--surface-shadow-xs);
+}
+
+html[data-theme='dark'] .course-container {
+  color: var(--text-primary);
+  background: var(--background-primary);
+}
+
+html[data-theme='dark'] .course-container .certificate-section {
+  background: color-mix(in srgb, var(--success-color) 10%, var(--background-primary));
+  border-color: color-mix(in srgb, var(--success-color) 30%, var(--border-color));
+}
+
+html[data-theme='dark'] .course-container .certificate-badge h3,
+html[data-theme='dark'] .course-container .certificate-badge p,
+html[data-theme='dark'] .course-container .cert-grade strong,
+html[data-theme='dark'] .course-container .cert-score strong,
+html[data-theme='dark'] .course-container .certificate-requirements h4,
+html[data-theme='dark'] .course-container .certificate-requirements p {
+  color: var(--success-color);
 }

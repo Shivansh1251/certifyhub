@@ -1,6 +1,17 @@
-const API_BASE = "http://localhost:5000/api";
+const configuredApiUrl = (process.env.REACT_APP_API_URL || '').replace(/\/+$/, '');
+export const API_BASE = configuredApiUrl
+  ? (/\/api$/i.test(configuredApiUrl) ? configuredApiUrl : `${configuredApiUrl}/api`)
+  : 'http://localhost:5000/api';
+export const API_ORIGIN = API_BASE.replace(/\/api$/i, '');
 
-async function apiRequest(endpoint, method = "GET", body = null, auth = false) {
+export const serverUrl = (path) => {
+  if (!path) return '';
+  const value = String(path);
+  if (/^(?:https?:)?\/\//i.test(value) || /^(?:data|blob):/i.test(value)) return value;
+  return `${API_ORIGIN}/${value.replace(/^\/+/, '')}`;
+};
+
+async function apiRequest(endpoint, method = "GET", body = null, auth = false, includeMeta = false) {
   const headers = {};
 
   // Only set Content-Type to application/json if body is not FormData
@@ -51,6 +62,7 @@ async function apiRequest(endpoint, method = "GET", body = null, auth = false) {
 
   // Handle standardized success responses
   if (data.success !== undefined) {
+    if (includeMeta) return data;
     return data.data || data; // Return data field for new format, full response for old format
   }
 

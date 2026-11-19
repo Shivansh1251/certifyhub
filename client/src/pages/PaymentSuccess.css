@@ -1,0 +1,36 @@
+.payment-success-page { display: grid; min-height: 60vh; place-items: center; padding: 30px 16px; }
+.payment-success-card { width: min(560px, 100%); padding: clamp(24px, 5vw, 44px); border: 1px solid #dbeafe; border-radius: 22px; background: linear-gradient(145deg, #fff, #f8fbff); box-shadow: 0 20px 55px rgba(30, 64, 175, .1); text-align: center; }
+.payment-success-mark { display: grid; width: 64px; height: 64px; place-items: center; margin: 0 auto 18px; border-radius: 50%; color: #15803d; background: #dcfce7; font-size: 2rem; font-weight: 800; }
+.payment-success-card .eyebrow { margin: 0 0 7px; color: #2563eb; font-size: .76rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.payment-success-card h1 { margin: 0; color: #172033; font-size: clamp(1.7rem, 5vw, 2.3rem); }
+.payment-success-card > p:not(.eyebrow) { margin: 12px 0 24px; color: #64748b; line-height: 1.6; }
+.payment-success-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+
+.payment-success-card {
+  border-color: var(--border-color);
+  border-radius: var(--border-radius-lg);
+  background: linear-gradient(145deg, var(--background-primary), var(--primary-50));
+  box-shadow: var(--surface-shadow-md);
+}
+
+.payment-success-card .eyebrow {
+  color: var(--primary-600);
+}
+
+.payment-success-card h1 {
+  color: var(--text-primary);
+  letter-spacing: -0.04em;
+}
+
+.payment-success-card > p:not(.eyebrow) {
+  color: var(--text-secondary);
+}
+
+.payment-success-mark {
+  color: var(--success-color);
+  background: color-mix(in srgb, var(--success-color) 15%, var(--background-primary));
+}
+
+html[data-theme='dark'] .payment-success-card {
+  background: linear-gradient(145deg, var(--background-primary), var(--background-strong));
+}

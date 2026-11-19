@@ -16,6 +16,10 @@ const questionSchema = new mongoose.Schema({
     required: true,
     enum: ['A', 'B', 'C', 'D']
   },
+  explanation: {
+    type: String,
+    default: "",
+  },
   points: {
     type: Number,
     default: 1,
@@ -43,6 +47,8 @@ const attemptSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  timeTaken: { type: Number, min: 0, default: null },
+  isAutoSubmit: { type: Boolean, default: false },
 });
 
 const quizSchema = new mongoose.Schema(
@@ -69,6 +75,22 @@ const quizSchema = new mongoose.Schema(
     timeLimit: {
       type: Number, // in minutes
       default: null,
+    },
+    passingScore: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 60,
+    },
+    attemptLimit: {
+      type: Number,
+      min: 1,
+      max: 10,
+      default: 1,
+    },
+    shuffleQuestions: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }

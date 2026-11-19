@@ -1,8 +1,63 @@
 const Course = require("../models/Course");
 const Review = require("../models/Review");
-const Certificate = require("../models/Certificate");
-const pdfGenerator = require("../utils/pdfGenerator");
 const { sendSuccess, sendSuccessList, sendError, sendNotFound, sendForbidden, sendConflict, sendValidationError } = require("../utils/apiResponse");
+const { issueCertificateIfEligible } = require("./certificateController");
+
+const normalizeStringList = (value) => {
+  const values = Array.isArray(value) ? value : String(value || '').split('\n');
+  return values.map(item => String(item).trim()).filter(Boolean).slice(0, 50);
+};
+const allowedSectionTypes = new Set(['theory', 'worked_example', 'key_terms', 'common_mistakes', 'takeaways']);
+const normalizeContentSections = (value) => {
+  if (!Array.isArray(value) || value.length > 30) return null;
+  const sections = value.map(section => ({
+    type: allowedSectionTypes.has(section?.type) ? section.type : 'theory',
+    heading: String(section?.heading || '').trim(),
+    body: String(section?.body || '').trim(),
+  }));
+  return sections.some(section => !section.heading || !section.body || section.heading.length > 120 || section.body.length > 12000)
+    ? null
+    : sections;
+};
+const normalizeSelfChecks = (value) => {
+  if (!Array.isArray(value) || value.length > 20) return null;
+  const checks = value.map(check => ({
+    question: String(check?.question || '').trim(),
+    answer: String(check?.answer || '').trim(),
+  }));
+  return checks.some(check => !check.question || !check.answer || check.question.length > 500 || check.answer.length > 1500)
+    ? null
+    : checks;
+};
+const normalizeGames = (value) => {
+  if (!Array.isArray(value) || value.length > 8) return null;
+  const games = value.map(game => ({
+    type: 'flashcards',
+    title: String(game?.title || '').trim(),
+    instructions: String(game?.instructions || '').trim(),
+    cards: Array.isArray(game?.cards) ? game.cards.map(card => ({
+      front: String(card?.front || '').trim(),
+      back: String(card?.back || '').trim(),
+    })) : [],
+  }));
+  return games.some(game => !game.title || game.title.length > 100 || game.instructions.length > 400
+    || game.cards.length < 2 || game.cards.length > 30
+    || game.cards.some(card => !card.front || !card.back || card.front.length > 300 || card.back.length > 2000))
+    ? null
+    : games;
+};
+const normalizeImageUrl = (value) => {
+  const url = String(value || '').trim();
+  if (!url) return '';
+  if (url.length > 2048 || url.startsWith('//')) return null;
+  if (url.startsWith('/')) return url;
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol) ? url : null;
+  } catch (error) {
+    return null;
+  }
+};
 
 // ---------------- CONTROLLERS ----------------
 
@@ -11,14 +66,31 @@ const { sendSuccess, sendSuccessList, sendError, sendNotFound, sendForbidden, se
 // @access  Private (Instructor only)
 exports.createCourse = async (req, res) => {
   try {
-    const { title, description, category, price, modules } = req.body;
+    const { title, description, category, price, modules, prerequisites, learningOutcomes } = req.body;
+    const estimatedDurationHours = req.body.estimatedDurationHours === '' || req.body.estimatedDurationHours === null
+      || req.body.estimatedDurationHours === undefined
+      ? null
+      : Number(req.body.estimatedDurationHours);
+
+    if (!title?.trim() || !description?.trim() || !category?.trim()) {
+      return sendValidationError(res, ["Title, description, and category are required"], "Course details are incomplete");
+    }
+    if (!Number.isFinite(Number(price ?? 0)) || Number(price ?? 0) < 0) {
+      return sendValidationError(res, ["Price must be a non-negative number"], "Invalid course price");
+    }
+    if (estimatedDurationHours !== null && (!Number.isFinite(estimatedDurationHours) || estimatedDurationHours < 0)) {
+      return sendValidationError(res, ["Estimated study hours must be a non-negative number"], "Invalid estimated duration");
+    }
 
     const course = new Course({
-      title,
-      description,
-      category,
-      price,
-      modules,
+      title: title.trim(),
+      description: description.trim(),
+      category: category.trim(),
+      price: Number(price ?? 0),
+      modules: Array.isArray(modules) ? modules : [],
+      prerequisites: normalizeStringList(prerequisites),
+      learningOutcomes: normalizeStringList(learningOutcomes),
+      estimatedDurationHours,
       instructor: req.user._id,
     });
 
@@ -29,6 +101,46 @@ exports.createCourse = async (req, res) => {
   }
 };
 
+// @desc    Update course overview and learning expectations
+// @route   PUT /api/courses/:id
+// @access  Private (Course instructor or admin)
+exports.updateCourse = async (req, res) => {
+  try {
+    const course = await Course.findById(req.params.id);
+    if (!course) return sendNotFound(res, "Course not found");
+    if (course.instructor.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+      return sendForbidden(res, "Not authorized to update this course");
+    }
+
+    const { title, description, category, price, prerequisites, learningOutcomes, estimatedDurationHours } = req.body;
+    const nextPrice = price === undefined ? course.price : Number(price);
+    const nextDuration = estimatedDurationHours === undefined
+      ? (course.estimatedDurationHours ?? null)
+      : estimatedDurationHours === '' || estimatedDurationHours === null
+        ? null
+        : Number(estimatedDurationHours);
+    if (title !== undefined && !String(title).trim()) return sendValidationError(res, ["Course title cannot be empty"], "Invalid course title");
+    if (description !== undefined && !String(description).trim()) return sendValidationError(res, ["Course description cannot be empty"], "Invalid course description");
+    if (category !== undefined && !String(category).trim()) return sendValidationError(res, ["Course category cannot be empty"], "Invalid course category");
+    if (!Number.isFinite(nextPrice) || nextPrice < 0) return sendValidationError(res, ["Price must be a non-negative number"], "Invalid course price");
+    if (nextDuration !== null && (!Number.isFinite(nextDuration) || nextDuration < 0)) {
+      return sendValidationError(res, ["Estimated study hours must be a non-negative number"], "Invalid estimated duration");
+    }
+
+    if (title !== undefined) course.title = String(title).trim();
+    if (description !== undefined) course.description = String(description).trim();
+    if (category !== undefined) course.category = String(category).trim();
+    course.price = nextPrice;
+    if (prerequisites !== undefined) course.prerequisites = normalizeStringList(prerequisites);
+    if (learningOutcomes !== undefined) course.learningOutcomes = normalizeStringList(learningOutcomes);
+    if (estimatedDurationHours !== undefined) course.estimatedDurationHours = nextDuration;
+
+    await course.save();
+    return sendSuccess(res, course, "Course overview updated successfully");
+  } catch (err) {
+    return sendError(res, "Could not update course overview", 500, err.message);
+  }
+};
 // @desc    Get all courses (with search & filter)
 // @route   GET /api/courses
 // @access  Public
@@ -152,58 +264,6 @@ const getDifficultyFromModules = (modules) => {
   return 'Advanced';
 };
 
-// Helper function to check course completion and auto-generate certificate
-const checkAndGenerateCertificate = async (studentId, courseId, course, user) => {
-  try {
-    const courseProgress = user.progress.get(courseId.toString()) || { completedModules: [], completedLessons: [], grades: {}, scores: {} };
-    const totalModules = course.modules.length;
-    const completedModules = courseProgress.completedModules ? courseProgress.completedModules.length : 0;
-    
-    // Check if all modules are completed
-    if (totalModules > 0 && completedModules === totalModules) {
-      // Check if certificate already exists
-      const existingCert = await Certificate.findOne({ student: studentId, course: courseId });
-      if (existingCert) {
-        console.log('Certificate already exists for student:', studentId, 'course:', courseId);
-        return;
-      }
-      
-      console.log('Auto-generating certificate for completed course:', courseId, 'student:', studentId);
-      
-      // Get instructor details
-      const User = require('../models/User');
-      const instructor = await User.findById(course.instructor);
-      const student = await User.findById(studentId);
-      
-      if (!student || !instructor) {
-        console.error('Student or instructor not found for certificate generation');
-        return;
-      }
-      
-      // Generate PDF certificate
-      const certificateUrl = await pdfGenerator.generateCertificate({
-        studentName: student.name,
-        courseTitle: course.title,
-        completionDate: new Date(),
-        instructorName: instructor.name,
-      });
-      
-      // Save certificate to database
-      const certificate = new Certificate({
-        student: studentId,
-        course: courseId,
-        grade: 'Pass', // You can customize this based on quiz scores or other criteria
-        certificateUrl,
-      });
-      
-      await certificate.save();
-      console.log('Certificate auto-generated successfully:', certificate._id);
-    }
-  } catch (error) {
-    console.error('Error in auto-certificate generation:', error);
-  }
-};
-
 // @desc    Get single course
 // @route   GET /api/courses/:id
 // @access  Public
@@ -220,7 +280,7 @@ exports.getCourseById = async (req, res) => {
         select: "name email _id",
       })
       .populate('modules.assignments')
-      .populate('modules.quizzes');
+      .populate({ path: 'modules.quizzes', select: 'title description timeLimit passingScore attemptLimit' });
 
     if (!course) return sendNotFound(res, "Course not found");
 
@@ -246,6 +306,10 @@ exports.enrollCourse = async (req, res) => {
     if (course.instructor.toString() === req.user._id.toString()) {
       console.warn('Enroll warning: Instructor cannot enroll in own course', req.user._id, course._id);
       return sendForbidden(res, "Instructors cannot enroll in their own courses");
+    }
+
+    if (course.price > 0) {
+      return sendForbidden(res, "Paid courses require payment before enrollment");
     }
 
     if (course.enrolledStudents.includes(req.user._id)) {
@@ -473,13 +537,16 @@ exports.getCourseRatings = async (req, res) => {
 exports.getCourseContent = async (req, res) => {
   try {
     const course = await Course.findById(req.params.id)
+      .populate('instructor', 'name')
       .populate('modules.lessons')
       .populate('modules.assignments')
       .populate('modules.quizzes');
     if (!course) return res.status(404).json({ message: 'Course not found' });
 
     // Only allow if enrolled or instructor
-    if (!course.enrolledStudents.map(id => id && id.toString()).includes(req.user._id.toString()) && course.instructor.toString() !== req.user._id.toString()) {
+    const instructorId = course.instructor?._id || course.instructor;
+    const isEnrolled = course.enrolledStudents.some(id => id && id.toString() === req.user._id.toString());
+    if (!isEnrolled && instructorId.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Not enrolled in this course' });
     }
 
@@ -489,15 +556,26 @@ exports.getCourseContent = async (req, res) => {
     if (!user.progress) {
       user.progress = new Map();
     }
-    let progress = user.progress.get(course._id.toString()) || { completedModules: [], completedLessons: [], grades: {}, scores: {} };
+    let progress = user.progress.get(course._id.toString()) || { completedModules: [], completedLessons: [], grades: {}, scores: {}, notes: {} };
     if (!user.progress.has(course._id.toString())) {
       user.progress.set(course._id.toString(), progress);
       await user.save();
     }
     const completedModules = progress.completedModules || [];
     const completedLessons = progress.completedLessons || [];
-    const grades = progress.grades || {};
+    const completedModuleIds = new Set(completedModules.map(moduleId => moduleId.toString()));
+    const lessonsFromCompletedModules = (course.modules || [])
+      .filter(module => completedModuleIds.has(module._id.toString()))
+      .flatMap(module => (module.lessons || []).map(lesson => lesson._id.toString()));
+    const normalizedCompletedLessons = Array.from(new Set([...completedLessons.map(lessonId => lessonId.toString()), ...lessonsFromCompletedModules]));
+    if (normalizedCompletedLessons.length !== completedLessons.length) {
+      progress.completedLessons = normalizedCompletedLessons;
+      user.progress.set(course._id.toString(), progress);
+      user.markModified('progress');
+      await user.save();
+    }
     const scores = progress.scores || {};
+    const readProgressValue = (values, key) => values instanceof Map ? values.get(key) : values?.[key];
 
     // Map modules to include all lessons, assignments, and quizzes
     const modules = (course.modules || []).map(mod => ({
@@ -508,31 +586,157 @@ exports.getCourseContent = async (req, res) => {
         title: lesson.title,
         contentType: lesson.contentType,
         content: lesson.content,
+        contentSections: lesson.contentSections || [],
+        selfChecks: lesson.selfChecks || [],
+        games: lesson.games || [],
+        imageUrl: lesson.imageUrl || '',
+        imageAlt: lesson.imageAlt || '',
+        imageCaption: lesson.imageCaption || '',
+        summary: lesson.summary,
+        notes: lesson.notes,
+        teachingTips: lesson.teachingTips,
+        objectives: lesson.objectives,
+        resources: lesson.resources,
         contentUrl: lesson.contentUrl,
+        duration: lesson.duration,
       })),
       assignments: (mod.assignments || []).map(assignment => ({
         _id: assignment._id,
         title: assignment.title,
         description: assignment.description,
         dueDate: assignment.dueDate,
-        userSubmission: assignment.submissions.find(sub => sub.student.toString() === req.user._id.toString()) || null,
-        // Add other assignment fields as needed
+      questions: assignment.questions || [],
+      rubric: assignment.rubric || [],
+      passingGrade: assignment.passingGrade ?? course.passingThreshold ?? 40,
+        userSubmission: (() => {
+          const studentSubmissions = (assignment.submissions || []).filter(sub => sub.student.toString() === req.user._id.toString());
+          const passingGrade = assignment.passingGrade ?? course.passingThreshold ?? 40;
+          const passingSubmission = studentSubmissions
+            .filter(sub => sub.status === 'graded' && sub.grade !== null && sub.grade !== undefined && sub.grade >= passingGrade)
+            .reduce((best, sub) => !best || sub.grade > best.grade ? sub : best, null);
+          return passingSubmission || studentSubmissions[studentSubmissions.length - 1] || null;
+        })(),
+        completed: (assignment.submissions || []).some(sub =>
+          sub.student.toString() === req.user._id.toString() &&
+          sub.status === 'graded' &&
+          sub.grade !== null &&
+          sub.grade !== undefined &&
+          sub.grade >= (assignment.passingGrade ?? course.passingThreshold ?? 40)
+        ),
       })),
-      quizzes: (mod.quizzes || []).map(quiz => ({
-        _id: quiz._id,
-        title: quiz.title,
-        questions: quiz.questions,
-        // Add other quiz fields as needed
-      }))
+      quizzes: (mod.quizzes || []).map(quiz => {
+        const studentAttempts = (quiz.attempts || []).filter(attempt => attempt.student.toString() === req.user._id.toString());
+        const storedScore = Number(readProgressValue(scores, quiz._id.toString()));
+        const bestAttemptScore = studentAttempts.length
+          ? studentAttempts.reduce((best, attempt) => Math.max(best, Number(attempt.score) || 0), 0)
+          : -1;
+        const bestScore = Math.max(Number.isFinite(storedScore) ? storedScore : -1, bestAttemptScore);
+        const passingScore = quiz.passingScore ?? course.passingThreshold ?? 40;
+        return {
+          _id: quiz._id,
+          title: quiz.title,
+          description: quiz.description,
+          marks: quiz.questions.reduce((total, question) => total + (question.points || 1), 0),
+          score: bestScore >= 0 ? bestScore : null,
+          completed: bestScore >= passingScore,
+          attemptCount: studentAttempts.length,
+          attemptsRemaining: Math.max(0, (quiz.attemptLimit || 1) - studentAttempts.length),
+          attemptLimit: quiz.attemptLimit || 1,
+          passingScore,
+          timeLimit: quiz.timeLimit,
+          questions: quiz.questions.map(question => ({
+            _id: question._id,
+            text: question.text,
+            options: question.options,
+            points: question.points,
+          })),
+        };
+      })
     }));
 
+    const completedModuleSet = new Set(completedModules.map(moduleId => moduleId.toString()));
+    const completedLessonSet = new Set(normalizedCompletedLessons);
+    let progressTotal = 0;
+    let progressDone = 0;
+    modules.forEach(module => {
+      progressTotal++;
+      if (completedModuleSet.has(module._id.toString())) progressDone++;
+      module.lessons.forEach(lesson => {
+        progressTotal++;
+        if (completedLessonSet.has(lesson._id.toString())) progressDone++;
+      });
+      module.assignments.forEach(assignment => {
+        progressTotal++;
+        if (assignment.completed) progressDone++;
+      });
+      module.quizzes.forEach(quiz => {
+        progressTotal++;
+        if (quiz.completed) progressDone++;
+      });
+    });
+    const progressPercentage = progressTotal ? Math.floor((progressDone / progressTotal) * 100) : 0;
+
     res.json({
-      course: { _id: course._id, title: course.title },
+      course: {
+        _id: course._id,
+        title: course.title,
+        instructor: { _id: instructorId, name: course.instructor?.name || '' },
+        passingThreshold: course.passingThreshold,
+        prerequisites: course.prerequisites || [],
+        learningOutcomes: course.learningOutcomes || [],
+        estimatedDurationHours: course.estimatedDurationHours ?? null,
+      },
       modules,
       completedModules,
+      completedLessons: normalizedCompletedLessons,
+      progress: progressPercentage,
+      personalNotes: progress.notes instanceof Map ? Object.fromEntries(progress.notes) : (progress.notes || {}),
     });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// @desc    Save or clear a learner's private note for a lesson
+// @route   PUT /api/courses/:id/lessons/:lessonId/notes
+// @access  Private (enrolled student or course instructor)
+exports.saveLessonNote = async (req, res) => {
+  try {
+    const { id, lessonId } = req.params;
+    const { note } = req.body;
+    if (typeof note !== 'string' || note.length > 10000) {
+      return res.status(400).json({ message: 'Notes must be text and no longer than 10,000 characters.' });
+    }
+
+    const course = await Course.findById(id);
+    if (!course) return res.status(404).json({ message: 'Course not found' });
+    const instructorId = course.instructor.toString();
+    const isInstructor = instructorId === req.user._id.toString();
+    const isEnrolled = course.enrolledStudents.some(student => student.toString() === req.user._id.toString());
+    const isAdmin = req.user.role === 'admin';
+    if (!isInstructor && !isEnrolled && !isAdmin) {
+      return res.status(403).json({ message: 'Enroll in this course to save lesson notes.' });
+    }
+    const lessonExists = course.modules.some(module => module.lessons.id(lessonId));
+    if (!lessonExists) return res.status(404).json({ message: 'Lesson not found' });
+
+    const User = require('../models/User');
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    const courseKey = course._id.toString();
+    const progress = user.progress.get(courseKey) || { completedModules: [], completedLessons: [], grades: {}, scores: {}, notes: {} };
+    const notes = progress.notes instanceof Map ? progress.notes : new Map(Object.entries(progress.notes || {}));
+    const trimmedNote = note.trim();
+    if (trimmedNote) notes.set(lessonId, trimmedNote);
+    else notes.delete(lessonId);
+    progress.notes = notes;
+    user.progress.set(courseKey, progress);
+    user.markModified('progress');
+    await user.save();
+
+    return res.json({ lessonId, note: trimmedNote, message: trimmedNote ? 'Note saved.' : 'Note cleared.' });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to save lesson note', error: err.message });
   }
 };
 
@@ -555,6 +759,8 @@ exports.completeModule = async (req, res) => {
       console.error('completeModule: Course not found', id);
       return res.status(404).json({ message: 'Course not found' });
     }
+    const module = course.modules.id(moduleId);
+    if (!module) return res.status(404).json({ message: 'Module not found' });
     let enrolled = false;
     try {
       enrolled = course.enrolledStudents.map(s => s && s.toString()).includes(req.user._id.toString());
@@ -599,20 +805,27 @@ exports.completeModule = async (req, res) => {
     }
     if (!courseProgress.completedModules.includes(moduleId)) {
       courseProgress.completedModules.push(moduleId);
+      if (!Array.isArray(courseProgress.completedLessons)) courseProgress.completedLessons = [];
+      module.lessons.forEach(lesson => {
+        const lessonId = lesson._id.toString();
+        if (!courseProgress.completedLessons.includes(lessonId)) courseProgress.completedLessons.push(lessonId);
+      });
       user.progress.set(id, courseProgress);
       try {
         await user.save();
         console.log('completeModule: user progress saved');
-        
-        // Check if course is completed and auto-generate certificate
-        await checkAndGenerateCertificate(req.user._id, id, course, user);
-        
       } catch (saveErr) {
         console.error('completeModule: Error saving user progress', saveErr);
         return res.status(500).json({ message: 'Server error (save user)', error: saveErr.message });
       }
     }
-    res.json({ message: 'Module marked as completed', completedModules: courseProgress.completedModules });
+    const certificateResult = await issueCertificateIfEligible(user._id, id);
+    res.json({
+      message: 'Module marked as completed',
+      completedModules: courseProgress.completedModules,
+      certificateGenerated: certificateResult.certificateGenerated,
+      certificateIssuedNow: Boolean(certificateResult.issuedNow),
+    });
   } catch (err) {
     console.error('completeModule: unknown error', err);
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -634,6 +847,8 @@ exports.incompleteModule = async (req, res) => {
       console.error('incompleteModule: Not enrolled', req.user._id, id);
       return res.status(403).json({ message: 'Not enrolled in this course' });
     }
+    const module = course.modules.id(moduleId);
+    if (!module) return res.status(404).json({ message: 'Module not found' });
     const User = require('../models/User');
     const user = await User.findById(req.user._id);
     if (!user) {
@@ -650,6 +865,8 @@ exports.incompleteModule = async (req, res) => {
     }
     if (courseProgress.completedModules.includes(moduleId)) {
       courseProgress.completedModules = courseProgress.completedModules.filter(mid => mid !== moduleId);
+      const moduleLessonIds = new Set(module.lessons.map(lesson => lesson._id.toString()));
+      courseProgress.completedLessons = (courseProgress.completedLessons || []).filter(lessonId => !moduleLessonIds.has(lessonId));
       user.progress.set(id, courseProgress);
       try {
         await user.save();
@@ -779,16 +996,104 @@ exports.addLesson = async (req, res) => {
     }
     const module = course.modules.id(req.params.moduleId);
     if (!module) return res.status(404).json({ message: 'Module not found' });
-    const { title, contentType, content, contentUrl } = req.body;
-    if (!title || !contentType) return res.status(400).json({ message: 'Lesson title and type required' });
-    let lesson = { title, contentType };
+    const { title, contentType, content, contentSections, selfChecks, games, imageUrl, imageAlt, imageCaption, summary, notes, teachingTips, objectives, resources, contentUrl, duration } = req.body;
+    if (!title?.trim() || !contentType) return res.status(400).json({ message: 'Lesson title and type required' });
+    if (!['text', 'video', 'pdf', 'doc', 'slide', 'dataset', 'image'].includes(contentType)) {
+      return sendValidationError(res, ['Choose a supported lesson type'], 'Invalid lesson type');
+    }
+    const normalizedSections = contentSections === undefined ? [] : normalizeContentSections(contentSections);
+    if (!normalizedSections) return sendValidationError(res, ['Every section needs a heading and body, with up to 30 sections allowed'], 'Invalid lesson sections');
+    const normalizedChecks = selfChecks === undefined ? [] : normalizeSelfChecks(selfChecks);
+    if (!normalizedChecks) return sendValidationError(res, ['Every self-check needs a question and answer, with up to 20 checks allowed'], 'Invalid lesson self-checks');
+    const normalizedGames = games === undefined ? [] : normalizeGames(games);
+    if (!normalizedGames) return sendValidationError(res, ['Each flashcard game needs a title and 2–30 complete cards'], 'Invalid lesson games');
+    const normalizedImageUrl = normalizeImageUrl(imageUrl);
+    if (normalizedImageUrl === null) return sendValidationError(res, ['Use an http(s) image URL or a local path beginning with /'], 'Invalid lesson image');
+    const normalizedContentUrl = contentType === 'image' ? normalizeImageUrl(contentUrl) : contentUrl;
+    if (contentType === 'image' && normalizedContentUrl === null) return sendValidationError(res, ['Use an http(s) image URL for image lessons'], 'Invalid lesson image');
+    const parseList = (value) => Array.isArray(value)
+      ? value.filter(item => typeof item === 'string' && item.trim())
+      : String(value || '').split('\n').map(item => item.trim()).filter(Boolean);
+    let lesson = {
+      title: title.trim(),
+      contentType,
+      contentSections: normalizedSections,
+      selfChecks: normalizedChecks,
+      games: normalizedGames,
+      imageUrl: normalizedImageUrl,
+      imageAlt: String(imageAlt || '').trim().slice(0, 300),
+      imageCaption: String(imageCaption || '').trim().slice(0, 500),
+      summary: summary || '',
+      notes: notes || '',
+      teachingTips: teachingTips || '',
+      objectives: parseList(objectives),
+      resources: parseList(resources),
+      duration: Number.isFinite(Number(duration)) && Number(duration) > 0 ? Number(duration) : undefined,
+    };
     if (contentType === 'text') lesson.content = content;
-    if (contentType === 'pdf' || contentType === 'slide' || contentType === 'doc' || contentType === 'video') lesson.contentUrl = contentUrl;
+    if (['pdf', 'slide', 'doc', 'video', 'dataset', 'image'].includes(contentType)) lesson.contentUrl = normalizedContentUrl;
     module.lessons.push(lesson);
+    const addedLesson = module.lessons[module.lessons.length - 1];
     await course.save();
-    res.status(201).json({ message: 'Lesson added', lessons: module.lessons });
+    res.status(201).json({ message: 'Lesson added', lesson: addedLesson, lessons: module.lessons });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// @desc    Update a lesson and its structured chapter content
+// @route   PUT /api/courses/:id/modules/:moduleId/lessons/:lessonId
+// @access  Private (Course instructor or admin)
+exports.updateLesson = async (req, res) => {
+  try {
+    const course = await Course.findById(req.params.id);
+    if (!course) return sendNotFound(res, 'Course not found');
+    if (course.instructor.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+      return sendForbidden(res, 'Not authorized to update this lesson');
+    }
+    const module = course.modules.id(req.params.moduleId);
+    if (!module) return sendNotFound(res, 'Module not found');
+    const lesson = module.lessons.id(req.params.lessonId);
+    if (!lesson) return sendNotFound(res, 'Lesson not found');
+
+    const { title, content, contentSections, selfChecks, games, imageUrl, imageAlt, imageCaption, summary, notes, teachingTips, objectives, resources, duration, contentUrl } = req.body;
+    if (title !== undefined && !String(title).trim()) return sendValidationError(res, ['Lesson title cannot be empty'], 'Invalid lesson title');
+    if (contentSections !== undefined) {
+      const sections = normalizeContentSections(contentSections);
+      if (!sections) return sendValidationError(res, ['Every section needs a heading and body, with up to 30 sections allowed'], 'Invalid lesson sections');
+      lesson.contentSections = sections;
+    }
+    if (selfChecks !== undefined) {
+      const checks = normalizeSelfChecks(selfChecks);
+      if (!checks) return sendValidationError(res, ['Every self-check needs a question and answer, with up to 20 checks allowed'], 'Invalid lesson self-checks');
+      lesson.selfChecks = checks;
+    }
+    if (games !== undefined) {
+      const normalizedGames = normalizeGames(games);
+      if (!normalizedGames) return sendValidationError(res, ['Each flashcard game needs a title and 2–30 complete cards'], 'Invalid lesson games');
+      lesson.games = normalizedGames;
+    }
+    if (title !== undefined) lesson.title = String(title).trim();
+    if (content !== undefined) lesson.content = String(content);
+    if (summary !== undefined) lesson.summary = String(summary);
+    if (notes !== undefined) lesson.notes = String(notes);
+    if (teachingTips !== undefined) lesson.teachingTips = String(teachingTips);
+    if (objectives !== undefined) lesson.objectives = normalizeStringList(objectives);
+    if (resources !== undefined) lesson.resources = normalizeStringList(resources);
+    if (contentUrl !== undefined) lesson.contentUrl = String(contentUrl);
+    if (imageUrl !== undefined) {
+      const normalizedImageUrl = normalizeImageUrl(imageUrl);
+      if (normalizedImageUrl === null) return sendValidationError(res, ['Use an http(s) image URL or a local path beginning with /'], 'Invalid lesson image');
+      lesson.imageUrl = normalizedImageUrl;
+    }
+    if (imageAlt !== undefined) lesson.imageAlt = String(imageAlt).trim().slice(0, 300);
+    if (imageCaption !== undefined) lesson.imageCaption = String(imageCaption).trim().slice(0, 500);
+    if (duration !== undefined) lesson.duration = Number.isFinite(Number(duration)) && Number(duration) > 0 ? Number(duration) : undefined;
+
+    await course.save();
+    return sendSuccess(res, lesson, 'Lesson chapter updated successfully');
+  } catch (err) {
+    return sendError(res, 'Could not update lesson chapter', 500, err.message);
   }
 };
 
@@ -827,6 +1132,9 @@ exports.uploadLessonFile = async (req, res) => {
     const lesson = module.lessons.id(req.params.lessonId);
     if (!lesson) return res.status(404).json({ message: 'Lesson not found' });
     if (req.file) {
+      if (lesson.contentType === 'image' && !['image/jpeg', 'image/png', 'image/webp'].includes(req.file.mimetype)) {
+        return sendValidationError(res, ['Lesson image uploads must be JPG, PNG, or WebP files'], 'Invalid lesson image');
+      }
       lesson.contentUrl = `/uploads/${req.file.filename}`;
       await course.save();
       return res.json({ message: 'File uploaded', lesson });
@@ -849,7 +1157,7 @@ exports.checkCourseCompletion = async (req, res) => {
     if (!course) return sendNotFound(res, "Course not found");
 
     // Verify student is enrolled
-    if (!course.enrolledStudents.includes(req.user._id)) {
+    if (!course.enrolledStudents.some(studentId => studentId.toString() === req.user._id.toString())) {
       return sendForbidden(res, "You are not enrolled in this course");
     }
 
@@ -877,6 +1185,8 @@ exports.checkCourseCompletion = async (req, res) => {
     let totalItems = 0;
     let completedItems = 0;
 
+    const readProgressValue = (values, key) => values instanceof Map ? values.get(key) : values?.[key];
+
     // Check modules completion
     course.modules.forEach(module => {
       if (courseProgress.completedModules && courseProgress.completedModules.includes(module._id.toString())) {
@@ -896,9 +1206,13 @@ exports.checkCourseCompletion = async (req, res) => {
 
       // Check assignments completion
       if (module.assignments && module.assignments.length > 0) {
-        module.assignments.forEach(assignment => {
+        module.assignments.filter(Boolean).forEach(assignment => {
           totalItems++;
-          if (courseProgress.grades && courseProgress.grades[assignment._id.toString()] !== undefined) {
+          const passingGrade = assignment.passingGrade ?? course.passingThreshold ?? 40;
+          const submission = (assignment.submissions || [])
+            .filter(item => item.student.toString() === req.user._id.toString() && item.status === 'graded' && item.grade !== null && item.grade !== undefined && item.grade >= passingGrade)
+            .reduce((best, item) => !best || item.grade > best.grade ? item : best, null);
+          if (submission) {
             completedItems++;
           }
         });
@@ -906,49 +1220,39 @@ exports.checkCourseCompletion = async (req, res) => {
 
       // Check quizzes completion
       if (module.quizzes && module.quizzes.length > 0) {
-        module.quizzes.forEach(quiz => {
+        module.quizzes.filter(Boolean).forEach(quiz => {
           totalItems++;
-          if (courseProgress.scores && courseProgress.scores[quiz._id.toString()] !== undefined) {
+          const recordedScore = Number(readProgressValue(courseProgress.scores, quiz._id.toString()));
+          const studentAttempts = (quiz.attempts || []).filter(attempt => attempt.student.toString() === req.user._id.toString());
+          const bestAttemptScore = studentAttempts.length
+            ? studentAttempts.reduce((best, attempt) => Math.max(best, Number(attempt.score) || 0), 0)
+            : -1;
+          const bestScore = Math.max(Number.isFinite(recordedScore) ? recordedScore : -1, bestAttemptScore);
+          if (bestScore >= (quiz.passingScore ?? course.passingThreshold ?? 40)) {
             completedItems++;
           }
         });
       }
     });
 
-    const progressPercentage = totalItems > 0 ? (completedItems / totalItems) * 100 : 0;
+    const progressPercentage = totalItems > 0 ? Math.floor((completedItems / totalItems) * 100) : 0;
 
     // Check if course is completed
-    const isCompleted = progressPercentage >= 100;
-
-    if (isCompleted && !courseProgress.certificateGenerated) {
-      // Generate certificate
-      try {
-        await generateCertificateForStudent(course, user, courseProgress);
-        courseProgress.certificateGenerated = true;
-        await user.save();
-
-        return res.status(200).json({
-          completed: true,
-          progress: progressPercentage,
-          certificateGenerated: true,
-          message: "Course completed! Certificate has been generated."
-        });
-      } catch (certError) {
-        console.error('Certificate generation error:', certError);
-        return res.status(200).json({
-          completed: true,
-          progress: progressPercentage,
-          certificateGenerated: false,
-          message: "Course completed but certificate generation failed. Please contact support."
-        });
-      }
-    }
-
+    const isCompleted = totalItems > 0 && completedItems === totalItems;
+    const certificateResult = isCompleted
+      ? await issueCertificateIfEligible(user._id, course._id)
+      : null;
+    const certificateGenerated = Boolean(certificateResult?.certificateGenerated);
     return res.status(200).json({
       completed: isCompleted,
       progress: progressPercentage,
-      certificateGenerated: courseProgress.certificateGenerated || false,
-      message: isCompleted ? "Course completed!" : `${Math.round(progressPercentage)}% complete`
+      certificateGenerated,
+      certificateIssuedNow: Boolean(certificateResult?.issuedNow),
+      certificate: certificateGenerated ? certificateResult.certificate : null,
+      certificateReason: certificateResult?.reason || null,
+      message: isCompleted
+        ? (certificateGenerated ? "Course completed and certificate issued." : certificateResult?.reason || "Course completed. Certificate issuance is being retried.")
+        : `${Math.round(progressPercentage)}% complete`
     });
 
   } catch (err) {
@@ -956,97 +1260,3 @@ exports.checkCourseCompletion = async (req, res) => {
     return sendError(res, "Server error", 500, err.message);
   }
 };
-
-// Helper function to generate certificate for completed course
-async function generateCertificateForStudent(course, student, courseProgress) {
-  try {
-    // Calculate overall grade
-    let totalAssignments = 0;
-    let totalAssignmentPoints = 0;
-    let totalQuizzes = 0;
-    let totalQuizPoints = 0;
-
-    // Calculate assignment scores
-    if (courseProgress.grades) {
-      Object.values(courseProgress.grades).forEach(grade => {
-        if (grade !== undefined && grade !== null) {
-          totalAssignments++;
-          totalAssignmentPoints += grade;
-        }
-      });
-    }
-
-    // Calculate quiz scores
-    if (courseProgress.scores) {
-      Object.values(courseProgress.scores).forEach(score => {
-        if (score !== undefined && score !== null) {
-          totalQuizzes++;
-          totalQuizPoints += score;
-        }
-      });
-    }
-
-    // Calculate weighted average
-    let overallScore = 0;
-    if (totalAssignments + totalQuizzes > 0) {
-      const assignmentWeight = totalAssignments / (totalAssignments + totalQuizzes);
-      const quizWeight = totalQuizzes / (totalAssignments + totalQuizzes);
-      overallScore = (totalAssignmentPoints * assignmentWeight) + (totalQuizPoints * quizWeight);
-    }
-
-    // Determine grade
-    let grade = "Pass";
-    if (overallScore >= 85) grade = "Distinction";
-    else if (overallScore >= 70) grade = "Merit";
-
-    // Generate PDF certificate
-    const certificateData = {
-      studentName: student.name,
-      courseTitle: course.title,
-      instructorName: course.instructor.name || "Course Instructor",
-      completionDate: new Date().toLocaleDateString(),
-      grade: grade,
-      score: Math.round(overallScore),
-      certificateId: `CERT-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
-    };
-
-    const certificateBuffer = await pdfGenerator.generateCertificate(certificateData);
-
-    // Save certificate to uploads directory
-    const fs = require('fs');
-    const path = require('path');
-    const uploadsDir = path.join(__dirname, '../../uploads/certificates');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-
-    const filename = `certificate_${student._id}_${course._id}_${Date.now()}.pdf`;
-    const filePath = path.join(uploadsDir, filename);
-
-    fs.writeFileSync(filePath, certificateBuffer);
-
-    // Create certificate record in database
-    const certificate = new Certificate({
-      student: student._id,
-      course: course._id,
-      certificateId: certificateData.certificateId,
-      certificateUrl: `/uploads/certificates/${filename}`,
-      grade: grade,
-      overallScore: Math.round(overallScore),
-      issuedBy: course.instructor,
-      metadata: {
-        pdfGeneratedAt: new Date(),
-        fileSize: certificateBuffer.length,
-        version: "1.0"
-      }
-    });
-
-    await certificate.save();
-
-    return certificate;
-
-  } catch (error) {
-    console.error('Error generating certificate:', error);
-    throw error;
-  }
-}

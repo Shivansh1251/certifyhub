@@ -55,8 +55,12 @@ exports.updateUserProfile = async (req, res) => {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    if (bio) user.bio = bio;
-    if (skills) user.skills = Array.isArray(skills) ? skills : skills.split(",");
+    if (bio !== undefined) user.bio = String(bio).trim();
+    if (skills !== undefined) {
+      user.skills = (Array.isArray(skills) ? skills : String(skills).split(','))
+        .map(skill => String(skill).trim())
+        .filter(Boolean);
+    }
 
     await user.save();
     res.json({ message: "Profile updated", user });
